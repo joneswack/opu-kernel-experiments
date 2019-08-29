@@ -59,7 +59,7 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, lr=1e-5, epochs=1
         for dim in range(y.shape[1]):
             print('Running CG for dim', dim)
             coef = scipy.sparse.linalg.cg(K, y[:, dim])[0]
-            dual_cofs.append(coef)
+            dual_cofs.append(coef.reshape((-1, 1)))
             print('Current coef shape', coef.shape)
         dual_coef = np.hstack(dual_cofs)
 
