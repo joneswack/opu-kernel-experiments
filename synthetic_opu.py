@@ -17,11 +17,15 @@ class RandomProjectionModule(nn.Module):
         return input.mm(self.weight.t())
 
 class OPUModulePyTorch(nn.Module):
-    def __init__(self, input_features, output_features, initial_log_scale=0., tunable_kernel=False, dtype=torch.FloatTensor):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
         super(OPUModulePyTorch, self).__init__()
 
         self.input_features = input_features
         self.output_features = output_features
+        
+        if initial_log_scale == 'auto':
+            # 1. / np.sqrt(input_features)
+            initial_log_scale = -0.5 * np.log(input_features)
         
         self.proj_real = RandomProjectionModule(input_features, output_features, mean=0., std=0.5, dtype=dtype)
         self.proj_im = RandomProjectionModule(input_features, output_features, mean=0., std=0.5, dtype=dtype)
@@ -39,17 +43,20 @@ class OPUModulePyTorch(nn.Module):
         # optional: we may also scale the kernel such that the inputs are unit-normalized
         
         # we scale with the original scale factor (leads to kernel variance)
-        return (1.0 / torch.exp(self.log_scale)) * (out_real + out_img)
+        return torch.exp(self.log_scale) * (out_real + out_img)
     
     
 class OPUModuleNumpy(object):
-    def __init__(self, input_features, output_features, initial_log_scale=0., dtype='float32'):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', dtype='float32'):
         super(OPUModuleNumpy, self).__init__()
         
         self.real_matrix = np.random.normal(loc=0.0, scale=0.5, size=(input_features, output_features)).astype(dtype)
         self.img_matrix = np.random.normal(loc=0.0, scale=0.5, size=(input_features, output_features)).astype(dtype)
         
-        self.log_scale = initial_log_scale
+        if initial_log_scale == 'auto':
+            self.log_scale = -0.5 * np.log(input_features)
+        else:
+            self.log_scale = initial_log_scale
         
     def project(self, data, matrix):
         return np.dot(data, matrix)
@@ -58,7 +65,7 @@ class OPUModuleNumpy(object):
         out_real = self.project(data, self.real_matrix) ** 2
         out_img = self.project(data, self.img_matrix) ** 2
 
-        return (1.0 / np.exp(self.log_scale)) * (out_real + out_img)
+        return np.exp(self.log_scale) * (out_real + out_img)
     
 class RBFModulePyTorch(nn.Module):
     def __init__(self, input_features, output_features, lengthscale_init='auto', tunable_kernel=False, dtype=torch.FloatTensor):

@@ -5,8 +5,13 @@ from sklearn.utils import check_array, check_X_y
 from sklearn.utils.validation import check_is_fitted
 from sklearn.linear_model import SGDRegressor
 import numpy as np
+from scipy import linalg
+import torch
+import scipy
 
-def _solve_kernel(K, y, alpha, sample_weight=None, copy=False):
+from multiple_regression_solver import MultipleRegressionSolver
+
+def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, lr=1e-5, epochs=10):
     # dual_coef = inv(X X^t + alpha*Id) y
     n_samples = K.shape[0]
     n_targets = y.shape[1]
@@ -42,12 +47,21 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False):
 #             dual_coef = linalg.lstsq(K, y)[0]
 
         # Solution 1:
-        dual_coef = linalg.lstsq(K, y)[0]
+        # dual_coef = linalg.lstsq(K, y)[0]
         
         # Solution 2:
-        # optimizer = SGDRegressor(penalty='none', fit_intercept=False)
-        # optimizer.fit(K, y)
-        # dual_coef = optimizer.coef_
+        # solver = MultipleRegressionSolver(K, y, batch_size=128, cuda=True)
+        # optimizer = torch.optim.Adam(solver.model.parameters(), lr=lr)
+        # dual_coef = solver.fit(optimizer, epochs=epochs)
+        
+        # Solution 3:
+        dual_cofs = []
+        for dim in range(y.shape[1]):
+            print('Running CG for dim', dim)
+            coef = scipy.sparse.linalg.cg(K, y[:, dim])[0]
+            dual_cofs.append(coef)
+            print('Current coef shape', coef.shape)
+        dual_coef = np.hstack(dual_cofs)
 
         # K is expensive to compute and store in memory so change it back in
         # case it was user-given.
@@ -59,7 +73,7 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False):
         return dual_coef
 
 class KernelRidge(object):
-    def __init__(self, alpha=1, kernel="linear", gamma=None, degree=3, coef0=1, kernel_params=None):
+    def __init__(self, alpha=1, kernel="linear", gamma=None, degree=3, coef0=1, kernel_params=None, lr=1e-5, epochs=10):
         self.alpha = alpha
         self.kernel = kernel
         self.gamma = gamma
@@ -100,9 +114,7 @@ class KernelRidge(object):
         # Solving cholesky has O(n^3) computation cost
         # We could use a stochastic optimizer or scipy leastsq
         # The following call is adapted
-        self.dual_coef_ = _solve_kernel(K, y, alpha,
-                                                 sample_weight,
-                                                 copy)
+        self.dual_coef_ = _solve_kernel(K, y, alpha, sample_weight, copy, lr=1e-5, epochs=10)
         if ravel:
             self.dual_coef_ = self.dual_coef_.ravel()
 
