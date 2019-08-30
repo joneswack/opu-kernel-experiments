@@ -1,7 +1,6 @@
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
-from lr_scheduler import ReduceLROnPlateau
 
 class RegressionModel(nn.Module):
     def __init__(self, input_dim, output_dim):

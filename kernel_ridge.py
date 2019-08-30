@@ -11,7 +11,7 @@ import scipy
 
 from multiple_regression_solver import MultipleRegressionSolver
 
-def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, lr=1e-5, epochs=10):
+def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, cg=True, tol=1e-5, lr=1e-5, bs=128, epochs=10):
     # dual_coef = inv(X X^t + alpha*Id) y
     n_samples = K.shape[0]
     n_targets = y.shape[1]
@@ -50,18 +50,19 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, lr=1e-5, epochs=1
         # dual_coef = linalg.lstsq(K, y)[0]
         
         # Solution 2:
-        # solver = MultipleRegressionSolver(K, y, batch_size=128, cuda=True)
-        # optimizer = torch.optim.Adam(solver.model.parameters(), lr=lr)
-        # dual_coef = solver.fit(optimizer, epochs=epochs)
-        
-        # Solution 3:
-        dual_cofs = []
-        for dim in range(y.shape[1]):
-            print('Running CG for dim', dim)
-            coef = scipy.sparse.linalg.cg(K, y[:, dim])[0]
-            dual_cofs.append(coef.reshape((-1, 1)))
-            print('Current coef shape', coef.shape)
-        dual_coef = np.hstack(dual_cofs)
+        if cg:
+            # conjugate gradients
+            dual_cofs = []
+            for dim in range(y.shape[1]):
+                print('Running CG for dim', dim)
+                coef, info = scipy.sparse.linalg.cg(K, y[:, dim], tol=tol)
+                dual_cofs.append(coef.reshape((-1, 1)))
+                print('CG Status:', info)
+            dual_coef = np.hstack(dual_cofs)
+        else:
+            solver = MultipleRegressionSolver(K, y, batch_size=bs, cuda=True)
+            optimizer = torch.optim.Adam(solver.model.parameters(), lr=lr)
+            dual_coef = solver.fit(optimizer, epochs=epochs)
 
         # K is expensive to compute and store in memory so change it back in
         # case it was user-given.
@@ -73,7 +74,7 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, lr=1e-5, epochs=1
         return dual_coef
 
 class KernelRidge(object):
-    def __init__(self, alpha=1, kernel="linear", gamma=None, degree=3, coef0=1, kernel_params=None, lr=1e-5, epochs=10):
+    def __init__(self, alpha=1, kernel="linear", gamma=None, degree=3, coef0=1, kernel_params=None):
         self.alpha = alpha
         self.kernel = kernel
         self.gamma = gamma
@@ -95,13 +96,14 @@ class KernelRidge(object):
     def _pairwise(self):
         return self.kernel == "precomputed"
 
-    def fit(self, X, y=None, sample_weight=None):
+    def fit(self, X, y=None, sample_weight=None, cg=True, tol=1e-5, lr=1e-5, bs=128, epochs=10):
         X, y = check_X_y(X, y, accept_sparse=("csr", "csc"), multi_output=True,
                          y_numeric=True)
         if sample_weight is not None and not isinstance(sample_weight, float):
             sample_weight = check_array(sample_weight, ensure_2d=False)
 
         K = self._get_kernel(X)
+        print('Kernel shape', K.shape)
         alpha = np.atleast_1d(self.alpha)
 
         ravel = False
@@ -114,7 +116,7 @@ class KernelRidge(object):
         # Solving cholesky has O(n^3) computation cost
         # We could use a stochastic optimizer or scipy leastsq
         # The following call is adapted
-        self.dual_coef_ = _solve_kernel(K, y, alpha, sample_weight, copy, lr=1e-5, epochs=10)
+        self.dual_coef_ = _solve_kernel(K, y, alpha, sample_weight, copy, cg=cg, tol=tol, lr=lr, bs=bs, epochs=epochs)
         if ravel:
             self.dual_coef_ = self.dual_coef_.ravel()
 
