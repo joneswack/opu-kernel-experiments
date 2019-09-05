@@ -39,7 +39,7 @@ for i in range(len(d_list)):
         for repe in range(repetitions):
             _ = gpu_obj(x+0.0*(repe+100*i+10000*j))
         e2 = e.energy()
-        e_gpu = (e2-e1)
+        e_gpu = (e2-e1).select_gpu("0")
         t_gpu[i,j] = e_gpu.duration()
         E_gpu[i,j] = e_gpu.consumption()
         

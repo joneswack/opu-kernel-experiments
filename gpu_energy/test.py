@@ -3,7 +3,7 @@ import time
 e = EnergyMonitor(period = 3)
 
 ener1 = e.energy()
-time.sleep(5)
+time.sleep(.5)
 ener2 = e.energy()
 print(ener1)
 print(ener2)
@@ -13,7 +13,7 @@ print(repr(ener2))
 
 print(repr(ener2-ener1))
 print((ener2-ener1))
-print((ener2-ener1).item("2"))
+print((ener2-ener1).consumption(gpu="2"))
 
 
 
