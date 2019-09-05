@@ -4,8 +4,9 @@ import os
 from os import remove
 import pandas as pd
 from datetime import datetime, timedelta
-from numpy import empty, array, sum as np_sum, float32, timedelta64,Inf
+from numpy import empty, array, sum as np_sum, float32, timedelta64,Inf, datetime64, zeros
 from io import StringIO
+from warnings import warn
 
 from pandas.plotting import register_matplotlib_converters
 register_matplotlib_converters()
@@ -62,17 +63,20 @@ class EnergyMonitor():
         self._gpus = list(df["gpu"])
         powers = list(df["power"])
         self._ngpus = len(self._gpus)
-        print("Detected GPU(s):",end = " ")
-        st = ""
-        for gpu,p in zip(self._gpus,powers):
-            st+="GPU "+gpu+" ("+str(p)+" W), "
-        print(st[:-2],end=".\n")
+        if self._ngpus>0:
+            print("Detected GPU(s):",end = " ")
+            st = ""
+            for gpu,p in zip(self._gpus,powers):
+                st+="GPU "+gpu+" ("+str(p)+" W), "
+            print(st[:-2],end=".\n")
+        else:
+            print("No GPU detected.")
         self._process = None
         
     def __del__(self):
         if self._process is not None:
             self._process.terminate()
-        print("Stop monitoring GPUs.")
+            print("Stop monitoring GPUs.")
         if not self.keep_data:
             try:
                 remove(self._output_file)
@@ -93,6 +97,8 @@ class EnergyMonitor():
     
     
     def to_numpy(self):
+        if self._ngpus==0:
+            return empty((0,0),dtype='datetime64[ms]'),empty((0,0)),[]
         newpd = self.to_pandas()
         gpu_names = list(pd.unique(newpd["gpu"]))
         ngpu = len(gpu_names)
@@ -110,7 +116,7 @@ class EnergyMonitor():
         return t, p, gpu_names
     
     def energy(self):
-        if self._process is None:
+        if self._process is None and self._ngpus>0:
             print("Starting GPU energy monitoring in background...",end = ' ')
             self._process = Popen(GPU_COMMAND+["-l"]+[str(self._period)],stdout=open(self._output_file,"a"))
             wait_for_nonempty(self._output_file)
@@ -118,8 +124,16 @@ class EnergyMonitor():
             
 
         t, p, gpus = self.to_numpy()
-        e = list(integrate(t,p))
-        return Energy(t[0,-1],dict(zip(gpus,e)))
+        now = datetime64("now")
+        if len(t)>0:
+            if t[-1]>now:
+                raise NotImplementedError("Something is wrong. This error should never appear as the dates in the csv file should always be after self.energy() call.")
+            p_chec = self._period +.5
+            diff = (now-t[-1]).item().total_seconds()
+            if diff>p_chec: # check if we work on recent value
+                warn("Last power evaluations was more than "+str(diff)+" seconds ago. Check if the background process "+str(self._process)+" is still writing in "+str(self._output_file)+".")
+        e = list(integrate(now,t,p))
+        return Energy(now,dict(zip(gpus,e)))
     
 
         
@@ -179,7 +193,11 @@ class Energy():
         return self.t> other.t
     
     
-def integrate(t,p):# trapezoidal integration
+def integrate(now,t,p):# trapezoidal integration
     # if `p` is in Watt, and `t` in miliseconds, output is in Joule.
+    if t.shape[-1]==0:
+        return zeros((*t.shape[:-1],0),dtype=float32)
     return np_sum((t[...,1:]-t[...,:-1]).astype(float32)/1000*(p[...,1:]+p[...,:-1])*.5,axis=-1)
+
+
 
