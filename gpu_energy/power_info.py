@@ -109,7 +109,7 @@ class EnergyMonitor():
             dfi = newpd[newpd["gpu"]==gpu_names[i]]
             n = len(dfi.index)
             if i>0 and n!=nmax:
-                st = "The number of measurements ("+str(n)+") for GPU "+gpu_names[i]+" is different from the ones we have seen so far "+str(nmax)+" while parsing self.pandas() with GPU(s) "
+                st = "The number of measurements ("+str(n)+") for GPU "+gpu_names[i]+" is different from the ones we have seen so far ("+str(nmax)+") while parsing self.pandas() with GPU(s) "
                 for j in range(i):
                     st+= gpu_names[j]+", "
                 st= st[:-2]+"."
@@ -124,22 +124,24 @@ class EnergyMonitor():
     def to_numpy(self):
         if self._ngpus==0:
             return empty((0,0),dtype='datetime64[ms]'),empty((0,0)),[]
-        
-
         ntries = 6
         delay  = .1
 
         for j in range(ntries):
             restart=False
             same, n, ngpus, dfs, gpu_names = self.analized_pandas()
-            if not same:
-                print("Count of GPUs change. Waiting "+str(delay)+" s to see if the subprocess is writting something...")
-                restart=True
-                sleep(delay)
+            if not same or ngpus!=self._ngpus:
+                if j<ntries-1:
+                    print("Waiting "+str(delay)+" s to see if the subprocess is writting something... (doesn't affect the measurments).")
+                    restart=True
+                    sleep(delay)
+                else:
+                    print("Waiting did not pay off. Reuse last measurments.")    
+            elif j>0:
+                print("Waiting paid off.")
             if not restart:
                 break
         
-
         t = empty((ngpus,n),dtype='datetime64[ms]')
         p = empty((ngpus,n))
         for i in range(ngpus):
