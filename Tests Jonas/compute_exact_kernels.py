@@ -14,13 +14,16 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] - %(message)s',
     filename='exact_kernels.log')
 
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
+
 
 ### Parameters:
 
 # number of training points (N=60000 for all data)
-N = 60000
+N = 60000 # 60000
 # alpha regularization terms for kernel ridge
-alphas = [0, 0.05, 0.1, 0.5]
+alphas = [0.05, 0.5, 1.0] # 0.05, 
 # scale values for the opu kernel
 gammas = [1.0]
 # fashion mnist has values between 0 and 255
@@ -50,16 +53,16 @@ test_data = test_data.reshape(-1, D)
 ### Preprocessing:
 
 def threshold_binarize(data, threshold):
-    data_bin = np.where(data>threshold, 1, 0).astype('uint8')
+    data_bin = np.where(data>threshold, 1, 0)
     return data_bin
 
-train_data_bin = threshold_binarize(train_data, threshold)
-test_data_bin = threshold_binarize(test_data, threshold)
+train_data_bin = threshold_binarize(train_data, threshold).astype('float32')
+test_data_bin = threshold_binarize(test_data, threshold).astype('float32')
 
 # like one-hot encoding with 0 corresponding to -1
 label_binarizer = LabelBinarizer(pos_label=1, neg_label=-1)
-train_labels_bin = label_binarizer.fit_transform(train_labels)
-test_labels_bin = label_binarizer.fit_transform(test_labels)
+train_labels_bin = label_binarizer.fit_transform(train_labels).astype('float32')
+test_labels_bin = label_binarizer.fit_transform(test_labels).astype('float32')
 
 ### Kernels to run:
 
@@ -95,9 +98,10 @@ kernels = {
 def train(kernel_matrix, target, alpha):
     clf = KernelRidge(alpha=alpha, kernel="precomputed")
     since = time.time()
-    clf.fit(kernel_matrix, target, cg=True, tol=1e-5)
+    loss = clf.fit(kernel_matrix, target, cg=False, tol=1e-5, lr=1, bs=60000)
     elapsed = time.time() - since
     logger.info('Training Time: {}'.format(elapsed))
+    logger.info('Training Loss: {}'.format(loss))
     
     return clf
 

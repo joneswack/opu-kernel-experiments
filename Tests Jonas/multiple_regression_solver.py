@@ -6,6 +6,7 @@ class RegressionModel(nn.Module):
     def __init__(self, input_dim, output_dim):
         super(RegressionModel, self).__init__()
         self.layer = nn.Linear(input_dim, output_dim, bias=False)
+        torch.nn.init.zeros_(self.layer.weight)
         
     def forward(self, input):
         return self.layer.forward(input)
@@ -51,6 +52,7 @@ class MultipleRegressionSolver(object):
         criterion = torch.nn.MSELoss()
         
         for epoch in range(epochs):
+            
             for step, (X, Y) in enumerate(self.data_loader):
                 if self.cuda:
                     X = X.type(torch.FloatTensor).cuda()
@@ -68,15 +70,18 @@ class MultipleRegressionSolver(object):
                         correct = (predictions == batch_targets).sum().item()
                         total = Y.size(0)
                         
+                        relative_error = ((output - Y).norm() / Y.norm()).item()
+                        
                     if step == 0:
-                        print('Epoch:', epoch, 'Loss:', loss.item(), 'Accuracy:', 100 * correct / total)
+                        self.final_loss = loss.item()
+                        print('Epoch:', epoch, 'Loss:', self.final_loss, 'Accuracy:', 100 * correct / total, 'Relative Error:', relative_error)
 
                     return loss
                 
                 optimizer.step(closure)
                 
         # returns the weights of shape (in, out)
-        return self.model.layer.weight.data.t().cpu().numpy()
+        return self.model.layer.weight.data.t().cpu().numpy(), self.final_loss
     
     def classification_score(self, data, targets):
         dataset = BasicDataset(data, targets)

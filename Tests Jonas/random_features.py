@@ -18,11 +18,26 @@ class RandomProjectionModule(nn.Module):
         return input.mm(self.weight.t())
 
 class OPUModulePyTorch(nn.Module):
-    def __init__(self, input_features, output_features, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
+    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
         super(OPUModulePyTorch, self).__init__()
 
         self.input_features = input_features
         self.output_features = output_features
+        
+        self.bias = bias
+        self.activation = activation
+        
+        if bias:
+            self.bias = nn.Parameter(torch.FloatTensor(1, self.output_features).uniform_(0, 2 * np.pi), requires_grad=False)
+        else:
+            self.bias = None
+            
+        if activation == 'cos':
+            self.activation = torch.cos
+        elif activation == 'sqrt':
+            self.activation = torch.sqrt
+        else:
+            self.activation = None
         
         if initial_log_scale == 'auto':
             # 1. / np.sqrt(input_features)
@@ -41,18 +56,34 @@ class OPUModulePyTorch(nn.Module):
         out_real = self.proj_real(input) ** 2
         out_img = self.proj_im(input) ** 2
         
-        # optional: we may also scale the kernel such that the inputs are unit-normalized
+        output = (out_real + out_img)
+        if self.bias is not None:
+            output += self.bias
+        if self.activation is not None:
+            output = self.activation(output)
         
         # we scale with the original scale factor (leads to kernel variance)
-        return torch.exp(self.log_scale) * (out_real + out_img)
+        return torch.exp(self.log_scale) * output
     
     
 class OPUModuleNumpy(object):
-    def __init__(self, input_features, output_features, initial_log_scale='auto', dtype='float32'):
+    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale='auto', dtype='float32'):
         super(OPUModuleNumpy, self).__init__()
         
         self.real_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
         self.img_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
+        
+        if bias:
+            self.bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_features))
+        else:
+            self.bias = None
+            
+        if activation == 'cos':
+            self.activation = np.cos
+        elif activation == 'sqrt':
+            self.activation = np.sqrt
+        else:
+            self.activation = None
         
         if initial_log_scale == 'auto':
             self.log_scale = -0.5 * np.log(input_features)
@@ -65,8 +96,57 @@ class OPUModuleNumpy(object):
     def forward(self, data):
         out_real = self.project(data, self.real_matrix) ** 2
         out_img = self.project(data, self.img_matrix) ** 2
+        
+        output = (out_real + out_img)
+        if self.bias is not None:
+            output += self.bias
+        if self.activation is not None:
+            output = self.activation(output)
 
-        return np.exp(self.log_scale) * (out_real + out_img)
+        return np.exp(self.log_scale) * output
+    
+    
+class OPUModuleReal(object):
+    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, dtype='float32', exposure_us=400):
+        from lightonml.projections.sklearn import OPUMap
+        
+        # One way to seed would be to move the camera ROI
+        # self.random_mapping.opu.device.cam_ROI = ([x_offset, y_offset], [width, height])
+        # However, it is easier to oversample from the output space and subsample afterwards
+        
+        self.random_mapping = OPUMap(n_components=output_features, ndims=1)
+        
+        self.random_mapping.opu.device.exposure_us = exposure_us
+        self.random_mapping.opu.device.frametime_us = exposure_us+100
+        
+        if bias:
+            self.bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_features))
+        else:
+            self.bias = None
+            
+        if activation == 'cos':
+            self.activation = np.cos
+        elif activation == 'sqrt':
+            self.activation = np.sqrt
+        else:
+            self.activation = None
+        
+        if initial_log_scale == 'auto':
+            self.log_scale = -0.5 * np.log(input_features)
+        else:
+            self.log_scale = initial_log_scale
+        
+    def forward(self, data):
+        output = self.random_mapping.transform(data.astype('uint8')).astype('float32')
+        # random_mapping.opu.close()
+        
+        if self.bias is not None:
+            output += self.bias
+        if self.activation is not None:
+            output = self.activation(output)
+
+        return np.exp(self.log_scale) * output
+
     
 class RBFModulePyTorch(nn.Module):
     def __init__(self, input_features, output_features, log_lengthscale_init='auto', tunable_kernel=False, dtype=torch.FloatTensor):
@@ -129,6 +209,7 @@ class RBFModuleNumpy(object):
 projections = {
     'opu_pytorch': OPUModulePyTorch,
     'opu_numpy': OPUModuleNumpy,
+    'opu_physical': OPUModuleReal,
     'rbf_pytorch': RBFModulePyTorch,
     'rbf_numpy': RBFModuleNumpy
 }
@@ -175,4 +256,4 @@ def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projectio
     print('Total time elapsed (seconds):', elapsed)
     print('Time per chunk (seconds):', elapsed / n_chunks)
     
-    return output_chunks
+    return output_chunks, elapsed
