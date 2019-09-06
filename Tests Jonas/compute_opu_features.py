@@ -65,8 +65,8 @@ def threshold_binarize(data, threshold):
     data_bin = np.where(data>threshold, 1, 0)
     return data_bin
 
-train_data_bin = threshold_binarize(train_data, threshold).astype('float32')
-test_data_bin = threshold_binarize(test_data, threshold).astype('float32')
+train_data_bin = threshold_binarize(train_data, threshold).astype('uint8')
+test_data_bin = threshold_binarize(test_data, threshold).astype('uint8')
 
 ### Features to compute:
 
@@ -79,8 +79,8 @@ output_dim = 100000 # allows us to use 5 seeds for up to 20K dimensions
 configuration = {
     'kernel': 'opu',
     'framework': 'physical',
-    'dummy_input': [True],
-    'exposure_us': [400] # [300, 400, 500, 600]
+    'dummy_input': [True, False],
+    'exposure_us': [500] # [300, 400, 500, 600]
 }
 
 ### Process the kernels one by one
@@ -107,7 +107,7 @@ for exposure_us in configuration['exposure_us']:
         data = np.vstack([train_data_bin[:N], test_data_bin])
 
         if dummy:
-            data = np.hstack([np.ones((len(data), 1)).astype('float32'), data])
+            data = np.hstack([np.ones((len(data), 1)).astype('uint8'), data])
 
         since = time.time()
         proj_data = proj.forward(data)

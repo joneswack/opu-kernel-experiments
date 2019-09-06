@@ -107,7 +107,7 @@ class OPUModuleNumpy(object):
     
     
 class OPUModuleReal(object):
-    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, dtype='float32', exposure_us=400):
+    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, exposure_us=400):
         from lightonml.projections.sklearn import OPUMap
         
         # One way to seed would be to move the camera ROI
@@ -119,33 +119,19 @@ class OPUModuleReal(object):
         self.random_mapping.opu.device.exposure_us = exposure_us
         self.random_mapping.opu.device.frametime_us = exposure_us+100
         
-        if bias:
-            self.bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_features))
-        else:
-            self.bias = None
-            
-        if activation == 'cos':
-            self.activation = np.cos
-        elif activation == 'sqrt':
-            self.activation = np.sqrt
-        else:
-            self.activation = None
-        
         if initial_log_scale == 'auto':
             self.log_scale = -0.5 * np.log(input_features)
         else:
             self.log_scale = initial_log_scale
         
     def forward(self, data):
-        output = self.random_mapping.transform(data.astype('uint8')).astype('float32')
+        output = self.random_mapping.transform(data.astype('uint8'))
         # random_mapping.opu.close()
         
-        if self.bias is not None:
-            output += self.bias
-        if self.activation is not None:
-            output = self.activation(output)
+        if self.log_scale != 0:
+            output = output * np.exp(self.log_scale)
 
-        return np.exp(self.log_scale) * output
+        return output
 
     
 class RBFModulePyTorch(nn.Module):

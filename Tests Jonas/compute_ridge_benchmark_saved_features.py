@@ -53,10 +53,10 @@ seeds = [0, 1, 2, 3, 4]
 config = {
         'kernel': 'opu',
         'framework': 'physical',
-        'dummy_input': [False], # [True, False],
+        'dummy_input': [True, False], # [True, False],
         'activation': [None, 'sqrt'],
         # 'exposure_us': [300, 400, 500]
-        'exposure_us': [400]
+        'exposure_us': [400, 500]
 }
 
 ### Process the kernels one by one
