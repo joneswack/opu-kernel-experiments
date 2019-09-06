@@ -12,7 +12,7 @@ from sklearn.linear_model import RidgeClassifier
 import logging
 
 save_name = 'opu_random_features'
-feature_dir = 'opu_fashion_mnist_features'
+feature_dir = 'fashion_mnist_features_syn_opu'
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -20,8 +20,8 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] - %(message)s',
     filename=save_name + '.log')
 
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"]="2"
+import os
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 
 ### Parameters:
@@ -38,21 +38,21 @@ logger.info('Bin. Threshold: {}'.format(threshold))
 
 ### Loading the data:
 
-from lightonml.datasets import FashionMNIST
+# from lightonml.datasets import FashionMNIST
 
-(train_data, train_labels), (test_data, test_labels) = FashionMNIST()
-D = train_data[0].reshape(-1).shape[0]
-
-# train_data = np.load('../datasets/export/fashion_mnist/numpy/train_data_fashion_mnist.npy').astype('uint8')
-# test_data = np.load('../datasets/export/fashion_mnist/numpy/test_data_fashion_mnist.npy').astype('uint8')
-# train_labels = np.load('../datasets/export/fashion_mnist/numpy/train_targets_fashion_mnist.npy').astype('uint8')
-# test_labels = np.load('../datasets/export/fashion_mnist/numpy/test_targets_fashion_mnist.npy').astype('uint8')
-
-# # Convert one-hot to integers
-# train_labels = np.argmax(train_labels, axis=1)
-# test_labels = np.argmax(test_labels, axis=1)
-
+# (train_data, train_labels), (test_data, test_labels) = FashionMNIST()
 # D = train_data[0].reshape(-1).shape[0]
+
+train_data = np.load('../../datasets/export/fashion_mnist/numpy/train_data_fashion_mnist.npy').astype('uint8')
+test_data = np.load('../../datasets/export/fashion_mnist/numpy/test_data_fashion_mnist.npy').astype('uint8')
+train_labels = np.load('../../datasets/export/fashion_mnist/numpy/train_targets_fashion_mnist.npy').astype('uint8')
+test_labels = np.load('../../datasets/export/fashion_mnist/numpy/test_targets_fashion_mnist.npy').astype('uint8')
+
+# Convert one-hot to integers
+train_labels = np.argmax(train_labels, axis=1)
+test_labels = np.argmax(test_labels, axis=1)
+
+D = train_data[0].reshape(-1).shape[0]
 
 # Flatten the images
 train_data = train_data.reshape(-1, D)
@@ -79,7 +79,7 @@ output_dim = 100000 # allows us to use 5 seeds for up to 20K dimensions
 configuration = {
     'kernel': 'opu',
     'framework': 'pytorch',
-    'cuda': True,
+    'cuda': False,
     'dummy_input': [True, False]
 }
 
@@ -90,60 +90,57 @@ configuration = {
 total_number_macro = len(configuration['dummy_input'])
 i = 0
 
-for exposure_us in configuration['exposure_us']:
-    for dummy in configuration['dummy_input']:
-        logger.info('-----------')
+for dummy in configuration['dummy_input']:
+    logger.info('-----------')
 
-        logger.info('Dummy: {}'.format(dummy))
+    logger.info('Dummy: {}'.format(dummy))
 
-        module = projections['_'.join([configuration['kernel'], configuration['framework']])]
-        input_dim = len(train_data_bin[0])
+    input_dim = len(train_data_bin[0])
 
-        if dummy:
-            input_dim += 1
+    if dummy:
+        input_dim += 1
 
-        proj = module(input_dim, output_dim, exposure_us=exposure_us)
-        data = np.vstack([train_data_bin[:N], test_data_bin])
+    data = np.vstack([train_data_bin[:N], test_data_bin])
 
-        if dummy:
-            data = np.hstack([np.ones((len(data), 1)).astype('float32'), data])
+    if dummy:
+        data = np.hstack([np.ones((len(data), 1)).astype('float32'), data])
 
-        proj_data, train_time = project_big_np_matrix(
-                                    data, out_dim=output_dim,
-                                    chunk_size=5000, projection=configuration['kernel'],
-                                    framework=configuration['framework'], dtype=torch.FloatTensor,
-                                    cuda=configuration['cuda'])
+    proj_data, train_time = project_big_np_matrix(
+                                data, out_dim=output_dim,
+                                chunk_size=5000, projection=configuration['kernel'],
+                                framework=configuration['framework'], dtype=torch.FloatTensor,
+                                cuda=configuration['cuda'])
 
-        logger.info('Projection Time: {}'.format(train_time))
+    logger.info('Projection Time: {}'.format(train_time))
 
-        # save features
-        dummy_dir = 'dummy' if dummy else 'no_dummy'
-        train_filename = 'train_{}K.npy.gz'.format(output_dim//1000)
-        test_filename = 'test_{}K.npy.gz'.format(output_dim//1000)
+    # save features
+    dummy_dir = 'dummy' if dummy else 'no_dummy'
+    train_filename = 'train_{}K.npy'.format(output_dim//1000)
+    test_filename = 'test_{}K.npy'.format(output_dim//1000)
 
-        out_dir = os.path.join(
-            feature_dir,
-            'exposure_{}'.format(exposure_us),
-            dummy_dir
-        )
+    out_dir = os.path.join(
+        feature_dir,
+        'exposure_{}'.format(exposure_us),
+        dummy_dir
+    )
 
-        if not os.path.exists(out_dir):
-            os.makedirs(out_dir)
+    if not os.path.exists(out_dir):
+        os.makedirs(out_dir)
 
-        train_file = gzip.GzipFile(os.path.join(out_dir, train_filename), "w")
-        np.save(train_file, proj_data[:N])
-        train_file.close()
+    # train_file = gzip.GzipFile(os.path.join(out_dir, train_filename), "w")
+    np.save(os.path.join(out_dir, train_filename), proj_data[:N])
+    # train_file.close()
 
-        test_file = gzip.GzipFile(os.path.join(out_dir, test_filename), "w")
-        np.save(test_file, proj_data[N:])
-        test_file.close()
+    # test_file = gzip.GzipFile(os.path.join(out_dir, test_filename), "w")
+    np.save(os.path.join(out_dir, test_filename), proj_data[N:])
+    # test_file.close()
 
-        # for loading later on:
-        # f = gzip.GzipFile('file.npy.gz', "r")
-        # np.load(f)
+    # for loading later on:
+    # f = gzip.GzipFile('file.npy.gz', "r")
+    # np.load(f)
 
-        logger.info('-----------\n')
-        i += 1
-        print('Finished {} / {} kernels'.format(i, total_number_macro))
+    logger.info('-----------\n')
+    i += 1
+    print('Finished {} / {} kernels'.format(i, total_number_macro))
 print('Done!')
         

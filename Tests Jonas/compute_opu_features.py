@@ -117,8 +117,8 @@ for exposure_us in configuration['exposure_us']:
 
         # save features
         dummy_dir = 'dummy' if dummy else 'no_dummy'
-        train_filename = 'train_{}K.npy.gz'.format(output_dim//1000)
-        test_filename = 'test_{}K.npy.gz'.format(output_dim//1000)
+        train_filename = 'train_{}K.npy'.format(output_dim//1000)
+        test_filename = 'test_{}K.npy'.format(output_dim//1000)
 
         out_dir = os.path.join(
             feature_dir,
@@ -129,13 +129,13 @@ for exposure_us in configuration['exposure_us']:
         if not os.path.exists(out_dir):
             os.makedirs(out_dir)
 
-        train_file = gzip.GzipFile(os.path.join(out_dir, train_filename), "w")
-        np.save(train_file, proj_data[:N])
-        train_file.close()
+        # train_file = gzip.GzipFile(os.path.join(out_dir, train_filename), "w")
+        np.save(os.path.join(out_dir, train_filename), proj_data[:N])
+        # train_file.close()
 
-        test_file = gzip.GzipFile(os.path.join(out_dir, test_filename), "w")
-        np.save(test_file, proj_data[N:])
-        test_file.close()
+        # test_file = gzip.GzipFile(os.path.join(out_dir, test_filename), "w")
+        np.save(os.path.join(out_dir, test_filename), proj_data[N:])
+        # test_file.close()
 
         # for loading later on:
         # f = gzip.GzipFile('file.npy.gz', "r")
