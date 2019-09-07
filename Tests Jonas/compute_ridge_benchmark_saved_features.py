@@ -13,13 +13,13 @@ import logging
 import warnings
 
 save_name = 'ridge_benchmark_opu'
-feature_dir = 'opu_fashion_mnist_features'
+feature_dir = 'fashion_mnist_features_opu'
 
 logger = logging.getLogger()
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] - %(message)s',
-    filename=save_name + '.log')
+    filename=os.path.join('logs', save_name + '.log'))
 
 # import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="2"
@@ -98,11 +98,11 @@ for exposure_time in config['exposure_us']:
         )
         
         print('Loading input file. This may take a while...')
-        train_file = gzip.GzipFile(os.path.join(data_dir, 'train_100K.npy.gz'), "r")
-        train_data = np.load(train_file).astype('float32')
+        # train_file = gzip.GzipFile(os.path.join(data_dir, 'train_100K.npy.gz'), "r")
+        train_data = np.load(os.path.join(data_dir, 'train_100K.npy')).astype('float32')
         
-        test_file = gzip.GzipFile(os.path.join(data_dir, 'test_100K.npy.gz'), "r")
-        test_data = np.load(test_file).astype('float32')
+        # test_file = gzip.GzipFile(os.path.join(data_dir, 'test_100K.npy.gz'), "r")
+        test_data = np.load(os.path.join(data_dir, 'test_100K.npy')).astype('float32')
         
         # print('Data type:', type(train_data[0,0]), type(test_data[0,0]))
         
