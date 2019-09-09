@@ -79,8 +79,8 @@ output_dim = 100000 # allows us to use 5 seeds for up to 20K dimensions
 configuration = {
     'kernel': 'opu',
     'framework': 'physical',
-    'dummy_input': [True, False],
-    'exposure_us': [500] # [300, 400, 500, 600]
+    'dummy_input': [False],
+    'exposure_us': [300, 600, 700] # [300, 400, 500, 600]
 }
 
 ### Process the kernels one by one

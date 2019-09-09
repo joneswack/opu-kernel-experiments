@@ -12,7 +12,7 @@ from sklearn.linear_model import RidgeClassifier
 import logging
 import warnings
 
-save_name = 'ridge_benchmark_opu'
+save_name = 'ridge_benchmark_opu_other_freq'
 feature_dir = 'fashion_mnist_features_opu'
 
 logger = logging.getLogger()
@@ -53,10 +53,10 @@ seeds = [0, 1, 2, 3, 4]
 config = {
         'kernel': 'opu',
         'framework': 'physical',
-        'dummy_input': [True, False], # [True, False],
-        'activation': [None, 'sqrt'],
+        'dummy_input': [False], # [True, False],
+        'activation': [None],
         # 'exposure_us': [300, 400, 500]
-        'exposure_us': [400, 500]
+        'exposure_us': [300, 600, 700]
 }
 
 ### Process the kernels one by one
