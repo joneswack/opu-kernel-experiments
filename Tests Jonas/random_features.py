@@ -18,26 +18,11 @@ class RandomProjectionModule(nn.Module):
         return input.mm(self.weight.t())
 
 class OPUModulePyTorch(nn.Module):
-    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
         super(OPUModulePyTorch, self).__init__()
 
         self.input_features = input_features
         self.output_features = output_features
-        
-        self.bias = bias
-        self.activation = activation
-        
-        if bias:
-            self.bias = nn.Parameter(torch.FloatTensor(1, self.output_features).uniform_(0, 2 * np.pi), requires_grad=False)
-        else:
-            self.bias = None
-            
-        if activation == 'cos':
-            self.activation = torch.cos
-        elif activation == 'sqrt':
-            self.activation = torch.sqrt
-        else:
-            self.activation = None
         
         if initial_log_scale == 'auto':
             # 1. / np.sqrt(input_features)
@@ -57,33 +42,17 @@ class OPUModulePyTorch(nn.Module):
         out_img = self.proj_im(input) ** 2
         
         output = (out_real + out_img)
-        if self.bias is not None:
-            output += self.bias
-        if self.activation is not None:
-            output = self.activation(output)
         
         # we scale with the original scale factor (leads to kernel variance)
         return torch.exp(self.log_scale) * output
     
     
 class OPUModuleNumpy(object):
-    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale='auto', dtype='float32'):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', dtype='float32'):
         super(OPUModuleNumpy, self).__init__()
         
         self.real_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
         self.img_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
-        
-        if bias:
-            self.bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_features))
-        else:
-            self.bias = None
-            
-        if activation == 'cos':
-            self.activation = np.cos
-        elif activation == 'sqrt':
-            self.activation = np.sqrt
-        else:
-            self.activation = None
         
         if initial_log_scale == 'auto':
             self.log_scale = -0.5 * np.log(input_features)
@@ -98,10 +67,6 @@ class OPUModuleNumpy(object):
         out_img = self.project(data, self.img_matrix) ** 2
         
         output = (out_real + out_img)
-        if self.bias is not None:
-            output += self.bias
-        if self.activation is not None:
-            output = self.activation(output)
 
         return np.exp(self.log_scale) * output
     
