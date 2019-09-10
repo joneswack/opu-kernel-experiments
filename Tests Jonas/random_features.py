@@ -112,7 +112,7 @@ class RBFModulePyTorch(nn.Module):
             requires_grad=False
         )
         
-        # initialize gamma to 1. / sqrt(input_features) since gamma = 1/(2l^2)
+        # initialize gamma to 1. / input_features since gamma = 1/(2l^2)
         if log_lengthscale_init == 'auto':
             log_lengthscale_init = 0.5 * torch.log(T([input_features]).type(dtype) / 2.)
         

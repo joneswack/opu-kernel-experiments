@@ -16,9 +16,9 @@ logger = logging.getLogger()
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] - %(message)s',
-    filename='logs/ridge_benchmark_syn_opu.log')
+    filename='logs/ridge_benchmark_syn_opu_2.log')
 
-save_name = 'csv/ridge_benchmark_syn_opu'
+save_name = 'csv/ridge_benchmark_syn_opu_2'
 
 import os
 # os.environ["CUDA_VISIBLE_DEVICES"]="2"
@@ -83,7 +83,7 @@ configurations = [
         'kernel': 'opu',
         'framework': 'pytorch',
         'cuda': True,
-        'dummy_input': [False, True], # [False, True],
+        'dummy_input': [True], # [False, True],
         'kernel_parameters': {
             'activation': [None, 'sqrt', 'cos'],
             'bias': [True, False]

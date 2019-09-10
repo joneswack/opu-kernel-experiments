@@ -3,13 +3,16 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 class RegressionModel(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, zero_init=True):
         super(RegressionModel, self).__init__()
         self.layer = nn.Linear(input_dim, output_dim, bias=False)
-        torch.nn.init.zeros_(self.layer.weight)
+        
+        if zero_init:
+            torch.nn.init.zeros_(self.layer.weight)
         
     def forward(self, input):
-        return self.layer.forward(input)
+        output = self.layer.forward(output)
+        return output
     
 class BasicDataset(Dataset):
     """Face Landmarks dataset."""
@@ -41,7 +44,7 @@ class MultipleRegressionSolver(object):
         
         self.dataset = BasicDataset(self.X, self.Y)
         self.data_loader = DataLoader(self.dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-        self.model = RegressionModel(self.X.shape[1], self.Y.shape[1])
+        self.model = RegressionModel(self.X.shape[1], self.Y.shape[1], feature_layer, zero_init)
         
         self.cuda = cuda
         
