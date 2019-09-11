@@ -46,7 +46,7 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, cg=True, tol=1e-5
 #                           "least-squares solution instead.")
 #             dual_coef = linalg.lstsq(K, y)[0]
 
-        # Solution 1:
+        # Solution 1 (never converges for large matrices):
         # dual_coef = linalg.lstsq(K, y)[0]
         
         # Solution 2:
@@ -59,10 +59,34 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, cg=True, tol=1e-5
                 dual_cofs.append(coef.reshape((-1, 1)))
                 print('CG Status:', info)
             dual_coef = np.hstack(dual_cofs)
+
         else:
             solver = MultipleRegressionSolver(K, y, batch_size=bs, cuda=True)
-            optimizer = torch.optim.Adam(solver.model.parameters(), lr=lr)
-            dual_coef = solver.fit(optimizer, epochs=epochs)
+            optimizer = torch.optim.LBFGS(solver.model.parameters(), lr=lr, tolerance_grad=1e-6, tolerance_change=1e-10, max_iter=10000, history_size=100)
+            dual_coef, loss = solver.fit(optimizer, epochs=1)
+#             dual_cofs = []
+            
+#             for dim in range(y.shape[1]):
+#                 print('Running solver for dim', dim)
+#                 target = y[:, dim]
+                
+#                 def objective_function(x):
+#                     # only works for arrays
+#                     # return np.sum((np.dot(K, x) - target)**2)
+#                     res = target - np.dot(K, x)
+#                     return np.dot(res.T, res)
+                
+#                 def objective_gradient(x):
+#                     return -2. * np.dot(K.T, target) + 2. * K.T.dot(K).dot(x)
+                
+#                 x0 = np.zeros(target.shape[0])
+#                 res = scipy.optimize.minimize(objective_function, x0, method='L-BFGS-B', jac=objective_gradient)
+#                 dual_cofs.append(res.x.reshape((-1, 1)))
+                
+#                 print('Success:', res.success)
+#                 print(res.message)
+#             dual_coef = np.hstack(dual_cofs)
+                
 
         # K is expensive to compute and store in memory so change it back in
         # case it was user-given.
@@ -71,7 +95,7 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, cg=True, tol=1e-5
         if has_sw:
             dual_coef *= sw[:, np.newaxis]
 
-        return dual_coef
+        return dual_coef, loss
 
 class KernelRidge(object):
     def __init__(self, alpha=1, kernel="linear", gamma=None, degree=3, coef0=1, kernel_params=None):
@@ -116,13 +140,13 @@ class KernelRidge(object):
         # Solving cholesky has O(n^3) computation cost
         # We could use a stochastic optimizer or scipy leastsq
         # The following call is adapted
-        self.dual_coef_ = _solve_kernel(K, y, alpha, sample_weight, copy, cg=cg, tol=tol, lr=lr, bs=bs, epochs=epochs)
+        self.dual_coef_, loss = _solve_kernel(K, y, alpha, sample_weight, copy, cg=cg, tol=tol, lr=lr, bs=bs, epochs=epochs)
         if ravel:
             self.dual_coef_ = self.dual_coef_.ravel()
 
         self.X_fit_ = X
 
-        return self
+        return loss
     
     def predict(self, X):
         check_is_fitted(self, ["X_fit_", "dual_coef_"])

@@ -1,3 +1,7 @@
+# Custom
+**/energy_consumption_temp_*.csv
+Tests Jonas/fashion_mnist_features_*
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

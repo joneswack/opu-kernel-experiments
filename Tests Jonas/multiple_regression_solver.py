@@ -3,12 +3,16 @@ import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
 
 class RegressionModel(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, zero_init=True):
         super(RegressionModel, self).__init__()
         self.layer = nn.Linear(input_dim, output_dim, bias=False)
         
+        if zero_init:
+            torch.nn.init.zeros_(self.layer.weight)
+        
     def forward(self, input):
-        return self.layer.forward(input)
+        output = self.layer.forward(output)
+        return output
     
 class BasicDataset(Dataset):
     """Face Landmarks dataset."""
@@ -40,7 +44,7 @@ class MultipleRegressionSolver(object):
         
         self.dataset = BasicDataset(self.X, self.Y)
         self.data_loader = DataLoader(self.dataset, batch_size=batch_size, shuffle=True, num_workers=0)
-        self.model = RegressionModel(self.X.shape[1], self.Y.shape[1])
+        self.model = RegressionModel(self.X.shape[1], self.Y.shape[1], feature_layer, zero_init)
         
         self.cuda = cuda
         
@@ -51,6 +55,7 @@ class MultipleRegressionSolver(object):
         criterion = torch.nn.MSELoss()
         
         for epoch in range(epochs):
+            
             for step, (X, Y) in enumerate(self.data_loader):
                 if self.cuda:
                     X = X.type(torch.FloatTensor).cuda()
@@ -68,15 +73,18 @@ class MultipleRegressionSolver(object):
                         correct = (predictions == batch_targets).sum().item()
                         total = Y.size(0)
                         
+                        relative_error = ((output - Y).norm() / Y.norm()).item()
+                        
                     if step == 0:
-                        print('Epoch:', epoch, 'Loss:', loss.item(), 'Accuracy:', 100 * correct / total)
+                        self.final_loss = loss.item()
+                        print('Epoch:', epoch, 'Loss:', self.final_loss, 'Accuracy:', 100 * correct / total, 'Relative Error:', relative_error)
 
                     return loss
                 
                 optimizer.step(closure)
                 
         # returns the weights of shape (in, out)
-        return self.model.layer.weight.data.t().cpu().numpy()
+        return self.model.layer.weight.data.t().cpu().numpy(), self.final_loss
     
     def classification_score(self, data, targets):
         dataset = BasicDataset(data, targets)

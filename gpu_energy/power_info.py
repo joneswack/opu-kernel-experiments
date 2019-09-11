@@ -96,23 +96,62 @@ class EnergyMonitor():
         return df
     
     
+    def analized_pandas(self):
+        same_number_of_measurements = True
+        newpd = self.to_pandas()
+        gpu_names = list(pd.unique(newpd["gpu"]))
+        ngpus = len(gpu_names)
+        if ngpus != self._ngpus:
+            warn("The number of GPUs found in self.pandas() ("+str(ngpus)+") is different from the initial believe ("+str(self._ngpus)+").")
+        nmax = 0
+        dfs = []
+        for i in range(ngpus):
+            dfi = newpd[newpd["gpu"]==gpu_names[i]]
+            n = len(dfi.index)
+            if i>0 and n!=nmax:
+                st = "The number of measurements ("+str(n)+") for GPU "+gpu_names[i]+" is different from the ones we have seen so far ("+str(nmax)+") while parsing self.pandas() with GPU(s) "
+                for j in range(i):
+                    st+= gpu_names[j]+", "
+                st= st[:-2]+"."
+                warn(st)
+                same_number_of_measurements = False
+            if n>nmax:
+                nmax = n
+            dfs += [dfi]
+        return same_number_of_measurements, nmax, ngpus, dfs, gpu_names
+        
+
     def to_numpy(self):
         if self._ngpus==0:
             return empty((0,0),dtype='datetime64[ms]'),empty((0,0)),[]
-        newpd = self.to_pandas()
-        gpu_names = list(pd.unique(newpd["gpu"]))
-        ngpu = len(gpu_names)
-        df1 = newpd[newpd["gpu"]==gpu_names[0]]
-        n = len(df1.index)
-        t = empty((ngpu,n),dtype='datetime64[ms]')
-        p = empty((ngpu,n))
-        t[0,:] = df1["time"]
-        p[0,:] = df1["power"]
-        base = datetime(2000, 1, 1)
-        for i in range(1,ngpu):
-            dfi =  newpd[newpd["gpu"]==gpu_names[i]]
-            t[i,:] = dfi["time"]
-            p[i,:] = dfi["power"]
+        ntries = 6
+        delay  = .1
+
+        for j in range(ntries):
+            restart=False
+            same, n, ngpus, dfs, gpu_names = self.analized_pandas()
+            if not same or ngpus!=self._ngpus:
+                if j<ntries-1:
+                    print("Waiting "+str(delay)+" s to see if the subprocess is writting something... (doesn't affect the measurments).")
+                    restart=True
+                    sleep(delay)
+                else:
+                    print("Waiting did not pay off. Reuse last measurments.")    
+            elif j>0:
+                print("Waiting paid off.")
+            if not restart:
+                break
+        
+        t = empty((ngpus,n),dtype='datetime64[ms]')
+        p = empty((ngpus,n))
+        for i in range(ngpus):
+            t_p = array(dfs[i]["time"])
+            p_p = array(dfs[i]["power"])
+            t[i,:len(t_p)] = t_p
+            t[i,len(t_p):] = t_p[-1]
+            p[i,:len(p_p)] = p_p
+            p[i,len(p_p):] = p_p[-1]
+    
         return t, p, gpu_names
     
     def energy(self):
@@ -124,12 +163,15 @@ class EnergyMonitor():
             
 
         t, p, gpus = self.to_numpy()
-        now = datetime64("now")
-        if len(t)>0:
-            if t[-1]>now:
-                raise NotImplementedError("Something is wrong. This error should never appear as the dates in the csv file should always be after self.energy() call.")
+        now_micro = datetime.now()
+        now = datetime64(now_micro).astype('datetime64[ms]')
+        
+        if t.shape[-1]>0 and self._ngpus>0:
+            now_got = t[0,-1]
+            if now_got>now:
+                raise NotImplementedError("Something is wrong. This error should never appear as the dates in "+str(self._output_file)+" should always be before self.energy() call ("+str(now)+").")
             p_chec = self._period +.5
-            diff = (now-t[-1]).item().total_seconds()
+            diff = (now-now_got).item().total_seconds()
             if diff>p_chec: # check if we work on recent value
                 warn("Last power evaluations was more than "+str(diff)+" seconds ago. Check if the background process "+str(self._process)+" is still writing in "+str(self._output_file)+".")
         e = list(integrate(now,t,p))
@@ -142,6 +184,7 @@ class Energy():
         self.t = t
         self.e = energies_dict
         self.dt = isinstance(t,timedelta64)
+        self.ngpus = len(energies_dict)
 
     def __repr__(self):
         return "Energy("+repr(self.t)+",\n"+repr(self.e)+")"
@@ -176,9 +219,30 @@ class Energy():
     def __abs__(self):
         E = (abs(e1) for e1 in self.e.values())
         return Energy(abs(self.t),dict(zip(self.e.keys(),E)))
-    
-    def item(self,gpu):
-        return self.e[gpu]
+
+    def duration(self):
+        if self.dt:
+            return self.t.item().total_seconds()
+        else:
+            raise ValueError("This Energy object is not a 'delta'.")
+
+    def select_gpu(self,gpu):
+        return Energy(self.t,{gpu:self.e[gpu]})
+
+    def consumption(self,gpu=None): # return float.
+        if not self.dt:
+            raise ValueError("This Energy object is not a difference between to time points. This is the energy since the first call EnergyMonitor.energy().")
+        if self.ngpus==0:
+            return 0. # No GPUs means no consumption
+        if gpu is None:
+            if self.ngpus==1:
+                return list(self.e.values())[0]
+            else:
+                raise ValueError("More than one GPU, but 'gpu' is not specified. Chose between gpu = "+str(self.e.keys())+" (must be str type, not int).")
+        else:
+            return self.e[gpu]
+
+
 
     # TODO more fine comparisons involving enerdict and a __hash__?
     def __eq__(self, other):
@@ -195,9 +259,14 @@ class Energy():
     
 def integrate(now,t,p):# trapezoidal integration
     # if `p` is in Watt, and `t` in miliseconds, output is in Joule.
+    second = timedelta64(1, 's') # for conversion to float
     if t.shape[-1]==0:
         return zeros((*t.shape[:-1],0),dtype=float32)
-    return np_sum((t[...,1:]-t[...,:-1]).astype(float32)/1000*(p[...,1:]+p[...,:-1])*.5,axis=-1)
+    I = np_sum((t[...,1:]-t[...,:-1])/second*(p[...,1:]+p[...,:-1])*.5,axis=-1)
+    I += (now-t[...,-1])/second*p[...,-1]
+    return I
+
+
 
 
 
