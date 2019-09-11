@@ -2,23 +2,35 @@ import torch
 import numpy as np
 from numpy import empty, Inf
 import scipy.stats
-from gpu_energy.power_info import EnergyMonitor
-import synthetic_opu
-from synthetic_opu import OPUModulePyTorch
+import sys
+sys.path.append(".")
+from power_info import EnergyMonitor
+
+sys.path.append("../Tests Jonas/")
+from random_features import OPUModulePyTorch
 import time
 dtype = torch.FloatTensor
 
 period = 2 # How often should we read (instant) power usage in seconds.
 e = EnergyMonitor(period=period)
 
-repetitions = 600 # repeat the hole experiment and take the mean
+repetitions = 600 # repeat the whole experiment and take the mean
 
 
 results_dir = "gpu_energy/results/"
-DEVICE = 1 # we handle divices at high level cause we read nvidia-smi command to get power info
-torch.cuda.set_device(DEVICE)
-gpu_device = torch.cuda.current_device()
-ngpus_torch = torch.cuda.device_count()
+DEVICE = "cpu"
+#DEVICE = 1  
+# we handle devices at high level 'cause we read nvidia-smi command to get power info
+
+
+
+try:
+    torch.cuda.set_device(DEVICE)
+    gpu_device = torch.cuda.current_device()
+    ngpus_torch = torch.cuda.device_count()
+except (NameError, ValueError):
+    gpu_device = "None"
+    ngpus_torch = 0
 
 print("PyTorch detects "+str(ngpus_torch)+" GPUs.")
 print("Experiment on GPU "+str(gpu_device)+".")
@@ -72,26 +84,27 @@ for i in range(len(d_list)):
         else:
             t_cpu[i,j] = Inf
 
-        print("Transfert to GPU...")
-        e1_lgpu = e.energy()
-        obj.to(gpu_device)
-        e2_lgpu = e.energy()
-        print("Done.")
-        print("Start matmuls...")
-        e1_gpu = e.energy()
-        for repe in range(repetitions):
-            _ = obj(x[repe,:,:].to(gpu_device).detach())
-        e2_gpu = e.energy()
-        print("Done.")
-        e_lgpu = (e2_lgpu-e1_lgpu).select_gpu(str(DEVICE)) # nvdia-smi number
-        t_lgpu[i,j] = e_lgpu.duration() + t_lcpu[i,j]    
-        E_lgpu[i,j] = e_lgpu.consumption() 
-        P_lgpu[i,j] = E_lgpu[i,j]/t_lgpu[i,j]
+        if ngpus_torch>0:
+            print("Transfert to GPU...")
+            e1_lgpu = e.energy()
+            obj.to(gpu_device)
+            e2_lgpu = e.energy()
+            print("Done.")
+            print("Start matmuls...")
+            e1_gpu = e.energy()
+            for repe in range(repetitions):
+                _ = obj(x[repe,:,:].to(gpu_device).detach())
+            e2_gpu = e.energy()
+            print("Done.")
+            e_lgpu = (e2_lgpu-e1_lgpu).select_gpu(str(DEVICE)) # nvdia-smi number
+            t_lgpu[i,j] = e_lgpu.duration() + t_lcpu[i,j]    
+            E_lgpu[i,j] = e_lgpu.consumption() 
+            P_lgpu[i,j] = E_lgpu[i,j]/t_lgpu[i,j]
 
-        e_gpu  = (e2_gpu-e1_gpu).select_gpu(str(DEVICE)) 
-        t_gpu[i,j] = e_gpu.duration()/repetitions    # take the mean
-        E_gpu[i,j] = e_gpu.consumption()/repetitions
-        P_gpu[i,j] = E_gpu[i,j]/t_gpu[i,j]
+            e_gpu  = (e2_gpu-e1_gpu).select_gpu(str(DEVICE)) 
+            t_gpu[i,j] = e_gpu.duration()/repetitions    # take the mean
+            E_gpu[i,j] = e_gpu.consumption()/repetitions
+            P_gpu[i,j] = E_gpu[i,j]/t_gpu[i,j]
 
 
 
