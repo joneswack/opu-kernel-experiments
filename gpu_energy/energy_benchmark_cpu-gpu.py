@@ -17,7 +17,7 @@ e = EnergyMonitor(period=period)
 repetitions = 600 # repeat the whole experiment and take the mean
 
 
-results_dir = "gpu_energy/results/"
+results_dir = "./results/"
 DEVICE = "cpu"
 #DEVICE = 1  
 # we handle devices at high level 'cause we read nvidia-smi command to get power info
