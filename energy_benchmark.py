@@ -11,7 +11,7 @@ dtype = torch.FloatTensor
 period = 2 # How often should we read (instant) power usage in seconds.
 e = EnergyMonitor(period=period)
 
-repetitions = 600 # repeat the hole experiment and take the mean
+repetitions = 200 # repeat the hole experiment and take the mean
 
 
 results_dir = "gpu_energy/results/"
@@ -26,7 +26,7 @@ print("Experiment on GPU "+str(gpu_device)+".")
 if e._ngpus != ngpus_torch:
     print("Pytorch doesn't see all GPUs. The GPUs number in EnergyMonitor corresponds to what nvidia-smi gives.")
 
-n = 100 # Number of points to be projected
+n = 1000 # Number of points to be projected
 d_list = [100,320,1000,3200,10000,32000] # Their dimension
 p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
 
