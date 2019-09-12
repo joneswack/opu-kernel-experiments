@@ -80,7 +80,7 @@ for i in range(len(d_list)):
                 _ = obj(x[repe,:,:].detach())
             e2_cpu = e.energy()
             print("Done.")
-            t_cpu[i,j] = (e2_cpu-e1_cpu).duration()
+            t_cpu[i,j] = (e2_cpu-e1_cpu).duration()/repetitions
         else:
             t_cpu[i,j] = Inf
 
