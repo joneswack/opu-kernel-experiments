@@ -48,11 +48,9 @@ r = .5 # proportion of ones in the data
 
 t_gpu = empty((len(d_list),len(p_list)))
 E_gpu = empty((len(d_list),len(p_list)))
-P_gpu = empty((len(d_list),len(p_list)))
 t_cpu = empty((len(d_list),len(p_list)))
 t_lgpu = empty((len(d_list),len(p_list)))
 E_lgpu = empty((len(d_list),len(p_list)))
-P_lgpu = empty((len(d_list),len(p_list)))
 t_lcpu = empty((len(d_list),len(p_list)))
 cpu_limit = 5
 
@@ -98,13 +96,11 @@ for i in range(len(d_list)):
             print("Done.")
             e_lgpu = (e2_lgpu-e1_lgpu).select_gpu(str(DEVICE)) # nvdia-smi number
             t_lgpu[i,j] = e_lgpu.duration() + t_lcpu[i,j]    
-            E_lgpu[i,j] = e_lgpu.consumption() 
-            P_lgpu[i,j] = E_lgpu[i,j]/t_lgpu[i,j]
+            E_lgpu[i,j] = e_lgpu.consumption()
 
             e_gpu  = (e2_gpu-e1_gpu).select_gpu(str(DEVICE)) 
             t_gpu[i,j] = e_gpu.duration()/repetitions    # take the mean
             E_gpu[i,j] = e_gpu.consumption()/repetitions
-            P_gpu[i,j] = E_gpu[i,j]/t_gpu[i,j]
 
 
 
@@ -114,8 +110,7 @@ print("GPU loading time:")
 print(t_lgpu)
 print("GPU loading energy (J):")
 print(E_lgpu)
-print("GPU average loading power (W):")
-print(P_lgpu)
+
 
 print("CPU time:")
 print(t_cpu)
@@ -123,8 +118,7 @@ print("GPU time:")
 print(t_gpu)
 print("GPU energy (J):")
 print(E_gpu)
-print("GPU average power (W):")
-print(P_gpu)
+
 
 
 
