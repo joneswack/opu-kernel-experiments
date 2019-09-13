@@ -14,7 +14,7 @@ dtype = torch.FloatTensor
 period = 2 # How often should we read (instant) power usage in seconds.
 e = EnergyMonitor(period=period)
 
-repetitions = 600 # repeat the whole experiment and take the mean
+repetitions = 80 # repeat the whole experiment and take the mean
 
 
 results_dir = "./results/"
