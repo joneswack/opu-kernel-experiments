@@ -12,16 +12,16 @@ from random_features import project_big_np_matrix
 import logging
 import warnings
 
+save_name = 'ridge_benchmark_syn_opu_optimized'
+
 logger = logging.getLogger()
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] - %(message)s',
-    filename='logs/ridge_benchmark_syn_opu_2.log')
-
-save_name = 'csv/ridge_benchmark_syn_opu_2'
+    filename='logs/{}.log'.format(save_name))
 
 import os
-# os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="2"
 
 
 ### Parameters:
@@ -68,22 +68,25 @@ def threshold_binarize(data, threshold):
 train_data_bin = threshold_binarize(train_data, threshold).astype('float32')
 test_data_bin = threshold_binarize(test_data, threshold).astype('float32')
 
+# compute number of active pixels
+active_pixels = np.vstack([train_data_bin, test_data_bin]).sum(axis=1, keepdims=True)
+
 ### Features to compute:
 
 from random_features import projections
 
-alphas = [0, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]
-output_dim = 100000
+alphas = [10.0] # [0.1, 1, 10, 100]
+kernel_scales = [0.001] # [1, 0.1, 0.01, 0.001, 0.0001, 0.00001]
 output_dims = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 10000]
-# output_dims = [3000, 4000, 5000, 10000]
 seeds = [0, 1, 2, 3, 4]
+output_dim = 100000
 
 configurations = [
     {
         'kernel': 'opu',
         'framework': 'pytorch',
         'cuda': True,
-        'dummy_input': [True], # [False, True],
+        'dummy_input': [False, True], # [False, True],
         'kernel_parameters': {
             'activation': [None, 'sqrt', 'cos'],
             'bias': [True, False]
@@ -127,7 +130,7 @@ def test(clf, data, target):
 df = pd.DataFrame()
 
 num_dummies = sum([len(config['dummy_input']) for config in configurations])
-total_number_macro = num_dummies * len(alphas) * len(output_dims)
+total_number_macro = num_dummies * len(alphas) * len(output_dims) * len(kernel_scales)
 i = 0
 
 for config in configurations:
@@ -159,76 +162,84 @@ for config in configurations:
 
         logger.info('Projection Time: {}'.format(proj_time))
         
-        for alpha in alphas:
-            for output_dim in output_dims:
-                for seed in seeds:
-                    logger.info('Alpha: {}'.format(alpha))
-                    logger.info('Output dim.: {}'.format(output_dim))
-                    logger.info('Seed: {}'.format(seed))
-                    
-                    # artificial seeding through oversampling opu features
-                    start_index = seed * output_dim
-                    end_index = (seed+1) * output_dim
+        # compute the raw scale of the projections (2*sigma^2)
+        raw_scale = (np.vstack([train_data, test_data]) / active_pixels).mean()
+        
+        for scale in kernel_scales:
+            factor = scale / raw_scale
+            proj_data *= factor
+        
+            for alpha in alphas:
+                for output_dim in output_dims:
+                    for seed in seeds:
+                        logger.info('Alpha: {}'.format(alpha))
+                        logger.info('Output dim.: {}'.format(output_dim))
+                        logger.info('Seed: {}'.format(seed))
 
-                    train_data_subsampled = proj_data[:N, start_index:end_index]
-                    test_data_subsampled = proj_data[N:, start_index:end_index]
-                    
-                    # Going through all combinations of kernel parameters
-                    kernel_parameters = config['kernel_parameters']
-                    # list of lists
-                    all_parameters = [kernel_parameters[key] for key in sorted(kernel_parameters.keys())]
-                    all_combinations = list(itertools.product(*all_parameters))
-                    all_combinations_dicts = []
-                    for combo in all_combinations:
-                        combo_dict = dict(list(zip(sorted(kernel_parameters.keys()), combo)))
-                        all_combinations_dicts.append(combo_dict)
+                        # artificial seeding through oversampling opu features
+                        start_index = seed * output_dim
+                        end_index = (seed+1) * output_dim
 
-                    for combo_dict in all_combinations_dicts:
-                        for key, item in combo_dict.items():
-                            logger.info('{}: {}'.format(key, item))
+                        train_data_subsampled = proj_data[:N, start_index:end_index]
+                        test_data_subsampled = proj_data[N:, start_index:end_index]
 
-                        since = time.time()
-                                
-                        if 'bias' in combo_dict:
-                            if combo_dict['bias']:
-                                bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_dim))
-                                train_data_subsampled += bias
-                                test_data_subsampled += bias
-                                
-                        if 'activation' in combo_dict:
-                            if combo_dict['activation'] == 'sqrt':
-                                train_data_subsampled = np.sqrt(train_data_subsampled)
-                                test_data_subsampled = np.sqrt(test_data_subsampled)
-                            elif combo_dict['activation'] == 'cos':
-                                train_data_subsampled = np.cos(train_data_subsampled)
-                                test_data_subsampled = np.cos(test_data_subsampled)
+                        # Going through all combinations of kernel parameters
+                        kernel_parameters = config['kernel_parameters']
+                        # list of lists
+                        all_parameters = [kernel_parameters[key] for key in sorted(kernel_parameters.keys())]
+                        all_combinations = list(itertools.product(*all_parameters))
+                        all_combinations_dicts = []
+                        for combo in all_combinations:
+                            combo_dict = dict(list(zip(sorted(kernel_parameters.keys()), combo)))
+                            all_combinations_dicts.append(combo_dict)
 
-                        clf, warned = train(train_data_subsampled, train_labels[:N], alpha)
+                        for combo_dict in all_combinations_dicts:
+                            for key, item in combo_dict.items():
+                                logger.info('{}: {}'.format(key, item))
 
-                        train_time = time.time() - since
+                            since = time.time()
 
-                        score = test(clf, test_data_subsampled, test_labels)
-                        logger.info('Score: {}'.format(score))
-                        logger.info('Training Time: {}'.format(train_time))
-                        logger.info('Warned: {}'.format(warned))
+                            if 'bias' in combo_dict:
+                                if combo_dict['bias']:
+                                    bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_dim))
+                                    train_data_subsampled += bias
+                                    test_data_subsampled += bias
 
-                        param_dict = {
-                            'kernel': config['kernel'],
-                            'framework': config['framework'],
-                            'test_score': score,
-                            'training_time': train_time,
-                            'alpha': alpha,
-                            'output_dim': output_dim,
-                            'dummy_input': True if dummy else False,
-                            'seed': seed,
-                            'inversion_warning': warned
-                        }
-                        
-                        param_dict = {**param_dict, **combo_dict}
+                            if 'activation' in combo_dict:
+                                if combo_dict['activation'] == 'sqrt':
+                                    train_data_subsampled = np.sqrt(train_data_subsampled)
+                                    test_data_subsampled = np.sqrt(test_data_subsampled)
+                                elif combo_dict['activation'] == 'cos':
+                                    train_data_subsampled = np.cos(train_data_subsampled)
+                                    test_data_subsampled = np.cos(test_data_subsampled)
 
-                        df = df.append(param_dict, ignore_index=True)
-                i = i + 1
-                print('Finished {} / {} kernels (incl. seeds)'.format(i, total_number_macro))
-                # we update the dataframe after processing one set of seeds
-                df.to_csv(save_name + '.csv', index=False)
+                            clf, warned = train(train_data_subsampled, train_labels[:N], alpha)
+
+                            train_time = time.time() - since
+
+                            score = test(clf, test_data_subsampled, test_labels)
+                            logger.info('Score: {}'.format(score))
+                            logger.info('Training Time: {}'.format(train_time))
+                            logger.info('Warned: {}'.format(warned))
+
+                            param_dict = {
+                                'kernel': config['kernel'],
+                                'framework': config['framework'],
+                                'test_score': score,
+                                'training_time': train_time,
+                                'alpha': alpha,
+                                'scale': scale,
+                                'output_dim': output_dim,
+                                'dummy_input': True if dummy else False,
+                                'seed': seed,
+                                'inversion_warning': warned
+                            }
+
+                            param_dict = {**param_dict, **combo_dict}
+
+                            df = df.append(param_dict, ignore_index=True)
+                    i = i + 1
+                    print('Finished {} / {} kernels (incl. seeds)'.format(i, total_number_macro))
+                    # we update the dataframe after processing one set of seeds
+                    df.to_csv(os.path.join('csv', save_name + '.csv'), index=False)
 print('Done!')

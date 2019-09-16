@@ -47,6 +47,7 @@ logger.info('Bin. Threshold: {}'.format(threshold))
 from random_features import projections
 
 alphas = [0, 0.05, 0.1, 0.5, 1.0, 5.0, 10.0]
+kernel_scales = [2.0] # 
 output_dims = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 10000]
 seeds = [0, 1, 2, 3, 4]
 
