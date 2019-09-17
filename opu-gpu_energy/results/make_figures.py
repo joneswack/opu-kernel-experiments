@@ -8,32 +8,44 @@ fig_dir = "./figures/"
 OPU_POWER = 30
 
 
+d_list = [100,320,1000,3200,10000,32000] # Their dimension
+p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
+repetitions = 10
+repetitions_opu = 10
+batchsize = 1000
+
+
 #cpu_time = np.load(results_dir+"cpu_time"+".npy") 
 #cpu_loadingtime = np.load(results_dir+"cpu_loadingtime"+".npy")
 
-gpu_time = np.load(results_dir+"gpu_time"+".npy")
-gpu_energy = np.load(results_dir+"gpu_energy"+".npy")
+gpu_time = np.load(results_dir+"gpu_time"+".npy")[:6,:6]
+gpu_energy = np.load(results_dir+"gpu_energy"+".npy")[:6,:6]
 gpu_power = gpu_energy/gpu_time
+gpu_frequency = batchsize/gpu_time
 
-gpu_loadingtime = np.load(results_dir+"gpu_loadingtime"+".npy")
-gpu_loadingenergy = np.load(results_dir+"gpu_loadingenergy"+".npy")
+gpu_loadingtime = np.load(results_dir+"gpu_loadingtime"+".npy")[:6,:6]
+gpu_loadingenergy = np.load(results_dir+"gpu_loadingenergy"+".npy")[:6,:6]
 gpu_loadingpower = gpu_loadingenergy/gpu_loadingtime
 
-opu_time = gpu_time # TODO
+opu_time = np.load(results_dir+"opu_time"+".npy")[:6,:6]
 opu_power = OPU_POWER*np.ones_like(opu_time)
 opu_energy = opu_time*opu_power
+opu_frequency = batchsize/opu_time
 
-opu_loadingtime = gpu_time # TODO
+opu_loadingtime = np.load(results_dir+"opu_loadingtime"+".npy")[:6,:6]
 opu_loadingpower = OPU_POWER*np.ones_like(opu_loadingtime)
 opu_loadingenergy = opu_loadingtime*opu_loadingpower
 
+# ideal OPU with frequency 2 kHz
+frequency = 2000
+ipu_frequency = np.ones_like(opu_time)*frequency
+ipu_time = batchsize/ipu_frequency
+ipu_power = OPU_POWER*np.ones_like(ipu_time)
+ipu_energy = ipu_time*ipu_power
 
-d_list = [100,320,1000,3200,10000,32000] # Their dimension
-p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
-repetitions = 80
-batchsize = 1000
 
-def savfig(Z,log=False,unit="",quantity="",file = "fig.png"):
+
+def savfig(Z,log=False,unit="",quantity="",file = "fig.png",repe=repetitions):
     fig,ax = plt.subplots()
     if log:
         plt.pcolor(Z,norm=colors.LogNorm(vmin=Z.min(), vmax=Z.max()))
@@ -47,7 +59,7 @@ def savfig(Z,log=False,unit="",quantity="",file = "fig.png"):
     plt.ylabel("Output dimension")
     clb = plt.colorbar() 
     clb.ax.set_title(unit)
-    plt.title(quantity+" for matrix projection\n of "+str(batchsize)+" batch points (estimated over "+str(repetitions)+" repetitions).")
+    plt.title(quantity+" for matrix projection of "+str(batchsize)+"\nbatch points (estimated over "+str(repetitions)+" repetitions)")
     plt.savefig(fig_dir+file)
 
 
@@ -66,20 +78,25 @@ def savfig_ratio(Z,log=False,unit="",quantity="",file = "fig.png"):
     plt.ylabel("Output dimension")
     clb = plt.colorbar() 
     clb.ax.set_title(unit)
-    plt.title(quantity+" for matrix projection\n of "+str(batchsize)+" batch points (estimated over "+str(repetitions)+" repetitions)")
+    plt.title(quantity+" for matrix projection of "+str(batchsize)+"\nbatch points (estimated over "+str(repetitions)+" repetitions)")
     plt.savefig(fig_dir+file)
 
 
+
 savfig(gpu_energy,True,"Joule","GPU energy","energy_GPU.png")
-savfig(gpu_time,False,"Second","GPU computation time","computation_time_GPU.png")
+savfig(gpu_time,False,"Second","GPU computation time","time_GPU.png")
 savfig(gpu_power,False,"Watt","GPU average power","average_power_GPU.png")
+savfig(gpu_frequency/1000,True,"kHz","GPU frequency","frequency_GPU.png")
 
+savfig(opu_energy,True,"Joule","OPU energy","energy_OPU.png",repe=repetitions_opu)
+savfig(opu_time,False,"Second","OPU computation time","time_OPU.png",repe=repetitions_opu)
+savfig(opu_power,False,"Watt","OPU average power","average_power_OPU.png",repe=repetitions_opu)
+savfig(opu_frequency/1000,False,"kHz","OPU frequency","frequency_OPU.png")
 
-savfig(opu_energy,True,"Joule","OPU energy","energy_OPU.png")
-savfig(opu_time,False,"Second","OPU computation time","computation_time_OPU.png")
-savfig(opu_power,False,"Watt","OPU average power","average_power_OPU.png")
-
-
+savfig(ipu_energy,True,"Joule","OPU energy","energy_idealOPU.png",repe=repetitions_opu)
+savfig(ipu_time,False,"Second","OPU computation time","time_idealOPU.png",repe=repetitions_opu)
+savfig(ipu_power,False,"Watt","OPU average power","average_power_idealOPU.png",repe=repetitions_opu)
+savfig(ipu_frequency/1000,False,"kHz","Ideal OPU frequency","frequency_idealOPU.png")
 
 
 savfig(gpu_loadingenergy,False,"Joule","GPU loading energy","loading_energy_GPU.png")
@@ -87,9 +104,9 @@ savfig(gpu_loadingtime,False,"Second","GPU loading time","loading_time_GPU.png")
 savfig(gpu_loadingpower,False,"Watt","GPU loading power","loading_power_GPU.png")
 
 
-savfig(opu_loadingenergy,True,"Joule","OPU loading energy","loading_energy_OPU.png")
-savfig(opu_loadingtime,False,"Second","OPU loading time","loading_time_OPU.png")
-savfig(opu_loadingpower,False,"Watt","OPU loading power","loading_power_OPU.png")
+savfig(opu_loadingenergy,True,"Joule","OPU loading energy","loading_energy_OPU.png",repe=repetitions_opu)
+savfig(opu_loadingtime,False,"Second","OPU loading time","loading_time_OPU.png",repe=repetitions_opu)
+savfig(opu_loadingpower,False,"Watt","OPU loading power","loading_power_OPU.png",repe=repetitions_opu)
 
 
 ## Ratios
@@ -97,9 +114,26 @@ savfig_ratio(gpu_energy/opu_energy,False,"","OPU energy 'saving-up'","energy_rat
 savfig_ratio(gpu_time/opu_time,False,"","OPU speed-up","time_ratio.png")
 savfig_ratio(gpu_power/opu_power,False,"","GPU average power over OPU power","average_power_ratio.png")
 
+savfig_ratio(gpu_energy/ipu_energy,False,"","OPU energy 'saving-up'","energy_ratio_idealOPU.png")
+savfig_ratio(gpu_time/ipu_time,False,"","OPU speed-up","time_ratio_idealOPU.png")
+savfig_ratio(gpu_power/ipu_power,False,"","GPU average power over OPU power","average_power_ratio_idealOPU.png")
+
+
+
 savfig_ratio(gpu_loadingenergy/opu_loadingenergy,False,"","GPU loading energy over OPU loading energy","loading_energy_ratio.png")
 savfig_ratio(gpu_loadingtime/opu_loadingtime,False,"","GPU loading time over OPU loading time","loading_time_ratio.png")
 savfig_ratio(gpu_loadingpower/opu_loadingpower,False,"","GPU loading power over OPU power","loading_power_ratio.png")
+
+
+# Custom
+v_gpu = gpu_loadingenergy + gpu_energy
+v_opu = gpu_loadingenergy + opu_energy
+w_gpu = gpu_loadingenergy + 100*gpu_energy
+w_opu = gpu_loadingenergy + 100*opu_energy
+savfig_ratio(v_gpu/v_opu,False,"","Energy GPU/OPU for 1 matmul including the building of the matrix","energy_loadingAnd1matmul_ratio.png")
+savfig_ratio(w_gpu/w_opu,False,"","Energy GPU/OPU for 100 matmul including the building of the matrix","energy_loadingAnd100matmul_ratio.png")
+
+
 
 
 """
