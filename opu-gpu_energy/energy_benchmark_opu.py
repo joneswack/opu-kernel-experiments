@@ -13,8 +13,8 @@ results_dir = "./results/"
 
 
 n = 1000 # Number of points to be projected
-d_list = [100,320,1000,3200,10000,32000] # Their dimension
-p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
+d_list = [100,320,1000,3200,10000,32000,100000] # Their dimension
+p_list = [100,320,1000,3200,10000,32000,100000] # Their targeted dimension
 
 r = .5 # proportion of ones in the data
 
