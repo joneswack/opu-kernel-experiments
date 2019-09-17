@@ -73,16 +73,12 @@ class OPUModuleNumpy(object):
     
 class OPUModuleReal(object):
     def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, exposure_us=400):
-        from lightonml.projections.sklearn import OPUMap
         
         # One way to seed would be to move the camera ROI
         # self.random_mapping.opu.device.cam_ROI = ([x_offset, y_offset], [width, height])
         # However, it is easier to oversample from the output space and subsample afterwards
-        
-        self.random_mapping = OPUMap(n_components=output_features, ndims=1)
-        
-        self.random_mapping.opu.device.exposure_us = exposure_us
-        self.random_mapping.opu.device.frametime_us = exposure_us+100
+        self.eposure_us = exposure_us
+        self.output_features = output_features
         
         if initial_log_scale == 'auto':
             self.log_scale = -0.5 * np.log(input_features)
@@ -90,7 +86,14 @@ class OPUModuleReal(object):
             self.log_scale = initial_log_scale
         
     def forward(self, data):
-        output = self.random_mapping.transform(data.astype('uint8'))
+        from lightonml.projections.sklearn import OPUMap
+        from lightonopu.opu import OPU
+        
+        with OPU(n_components=self.output_features) as opu_dev:
+            random_mapping = OPUMap(opu=opu_dev, n_components=self.output_features, ndims=1)
+            random_mapping.opu.device.exposure_us = self.eposure_us
+            random_mapping.opu.device.frametime_us = self.eposure_us+100
+            output = random_mapping.transform(data.astype('uint8'))
         # random_mapping.opu.close()
         
         if self.log_scale != 0:

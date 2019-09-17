@@ -11,7 +11,7 @@ from sklearn.linear_model import RidgeClassifier
 
 import logging
 
-save_name = 'opu_random_features'
+save_name = 'opu_random_features_100'
 feature_dir = 'fashion_mnist_features_opu'
 
 logger = logging.getLogger()
@@ -80,7 +80,7 @@ configuration = {
     'kernel': 'opu',
     'framework': 'physical',
     'dummy_input': [False],
-    'exposure_us': [300, 600, 700] # [300, 400, 500, 600]
+    'exposure_us': [100] # [300, 600, 700] # [300, 400, 500, 600]
 }
 
 ### Process the kernels one by one

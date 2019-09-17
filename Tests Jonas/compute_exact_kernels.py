@@ -12,10 +12,10 @@ logger = logging.getLogger()
 logging.basicConfig(
     level=logging.INFO, 
     format='%(asctime)s [%(levelname)s] - %(message)s',
-    filename='exact_kernels.log')
+    filename='exact_kernels_new.log')
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+os.environ["CUDA_VISIBLE_DEVICES"]="3"
 
 
 ### Parameters:
@@ -23,7 +23,7 @@ os.environ["CUDA_VISIBLE_DEVICES"]="2"
 # number of training points (N=60000 for all data)
 N = 60000 # 60000
 # alpha regularization terms for kernel ridge
-alphas = [0.05, 0.5, 1.0] # 0.05, 
+alphas = [0.05, 0.5, 1.0, 5.0, 10.0] # 0.05, 
 # scale values for the opu kernel
 gammas = [1.0]
 # fashion mnist has values between 0 and 255
@@ -34,10 +34,10 @@ logger.info('Bin. Threshold: {}'.format(threshold))
 
 ### Loading the data:
 
-train_data = np.load('../datasets/export/fashion_mnist/numpy/train_data_fashion_mnist.npy').astype('uint8')
-test_data = np.load('../datasets/export/fashion_mnist/numpy/test_data_fashion_mnist.npy').astype('uint8')
-train_labels = np.load('../datasets/export/fashion_mnist/numpy/train_targets_fashion_mnist.npy').astype('uint8')
-test_labels = np.load('../datasets/export/fashion_mnist/numpy/test_targets_fashion_mnist.npy').astype('uint8')
+train_data = np.load('../../datasets/export/fashion_mnist/numpy/train_data_fashion_mnist.npy').astype('uint8')
+test_data = np.load('../../datasets/export/fashion_mnist/numpy/test_data_fashion_mnist.npy').astype('uint8')
+train_labels = np.load('../../datasets/export/fashion_mnist/numpy/train_targets_fashion_mnist.npy').astype('uint8')
+test_labels = np.load('../../datasets/export/fashion_mnist/numpy/test_targets_fashion_mnist.npy').astype('uint8')
 
 # Convert one-hot to integers
 train_labels = np.argmax(train_labels, axis=1)

@@ -61,14 +61,21 @@ def _solve_kernel(K, y, alpha, sample_weight=None, copy=False, cg=True, tol=1e-5
             dual_coef = np.hstack(dual_cofs)
 
         else:
-            solver = MultipleRegressionSolver(K, y, batch_size=bs, cuda=True)
-            optimizer = torch.optim.LBFGS(solver.model.parameters(), lr=lr, tolerance_grad=1e-6, tolerance_change=1e-10, max_iter=10000, history_size=100)
-            dual_coef, loss = solver.fit(optimizer, epochs=1)
-#             dual_cofs = []
+            # Own LBFGS:
+            # solver = MultipleRegressionSolver(K, y, batch_size=bs, cuda=True)
+            # optimizer = torch.optim.LBFGS(solver.model.parameters(), lr=lr, tolerance_grad=1e-6, tolerance_change=1e-10, max_iter=10000, history_size=100)
+            # dual_coef, loss = solver.fit(optimizer, epochs=1)
             
-#             for dim in range(y.shape[1]):
-#                 print('Running solver for dim', dim)
-#                 target = y[:, dim]
+            # (dual_cofs, QR) = torch.gels(torch.from_numpy(y).cuda(), torch.from_numpy(K).cuda(), out=None)
+            dual_cofs = []
+            
+            for dim in range(y.shape[1]):
+                print('Running solver for dim', dim)
+                target = y[:, dim][:, None]
+                
+                nn.DataParallel(model)
+                
+                (dual_cof, QR) = torch.gels(torch.from_numpy(target).cuda(), torch.from_numpy(K).cuda(), out=None)
                 
 #                 def objective_function(x):
 #                     # only works for arrays
