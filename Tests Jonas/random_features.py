@@ -13,7 +13,7 @@ class RandomProjectionModule(nn.Module):
 
         self.weight = nn.Parameter(torch.zeros(output_features, input_features).type(dtype), requires_grad=False)
         torch.nn.init.normal_(self.weight, mean, std)
-
+        
     def forward(self, input):
         return input.mm(self.weight.t())
 

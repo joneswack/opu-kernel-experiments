@@ -22,7 +22,7 @@ def make_datetime(text):
     return datetime.strptime(text.strip('" '),'%Y/%m/%d %H:%M:%S.%f')
     
 def make_float(text):
-    if text[-1] == "W":
+    if len(text)>0 and text[-1] == "W":
         text = text[:-1]
     return float(text.strip('" '))
     
@@ -86,7 +86,18 @@ class EnergyMonitor():
     def to_pandas(self,f=None):
         if f is None:
             f = self._output_file
-        df = pd.DataFrame(pd.read_csv(f,
+        try:
+            df = pd.DataFrame(pd.read_csv(f,
+                names=["gpu", "time", "power"],
+                skiprows=[0],
+                converters = {"gpu" : make_str,
+                              "time":make_datetime,
+                                    'power' : make_float}
+                                       ))
+        except ValueError:
+            sleep(.2)
+            print("Failed reading str "+f+". Retry.")
+            df = pd.DataFrame(pd.read_csv(f,
                 names=["gpu", "time", "power"],
                 skiprows=[0],
                 converters = {"gpu" : make_str,

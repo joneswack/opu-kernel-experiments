@@ -7,13 +7,16 @@ fig_dir = "./figures/"
 
 OPU_POWER = 30
 
-
+# must be the same as in ../energy_benchmark_*.py
 d_list = [100,320,1000,3200,10000,32000] # Their dimension
 p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
 repetitions = 10
 repetitions_opu = 10
 batchsize = 1000
 
+
+# ideal OPU with frequency 2 kHz:
+frequency = 2000
 
 #cpu_time = np.load(results_dir+"cpu_time"+".npy") 
 #cpu_loadingtime = np.load(results_dir+"cpu_loadingtime"+".npy")
@@ -36,8 +39,7 @@ opu_loadingtime = np.load(results_dir+"opu_loadingtime"+".npy")[:6,:6]
 opu_loadingpower = OPU_POWER*np.ones_like(opu_loadingtime)
 opu_loadingenergy = opu_loadingtime*opu_loadingpower
 
-# ideal OPU with frequency 2 kHz
-frequency = 2000
+
 ipu_frequency = np.ones_like(opu_time)*frequency
 ipu_time = batchsize/ipu_frequency
 ipu_power = OPU_POWER*np.ones_like(ipu_time)
