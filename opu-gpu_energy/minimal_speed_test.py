@@ -28,7 +28,7 @@ print("Done.")
 
 print("Building the weight matrix...")
 e1_lgpu = time.time()
-real      = torch.randn(d,p,dtype=dtype,device=device) # complex weights
+real = torch.randn(d,p,dtype=dtype,device=device) # complex weights
 if not only_real:
     imaginary = torch.randn(d,p,dtype=dtype,device=device)
 e2_lgpu = time.time()

@@ -59,7 +59,7 @@ class OPUModulePyTorch(nn.Module):
 
 ### META SETTINGS
 # -------------
-RESULTS_DIR = "./new_results/"
+RESULTS_DIR = "./results/"
 DEVICE = 1 if torch.cuda.is_available() else "cpu" # Choose your GPU to monitor (nvidia-smi number)
 # we handle devices at high level 'cause we read nvidia-smi command to get power info
 PERIOD = 2 # How often should we read (instant) power usage in seconds.
@@ -90,7 +90,7 @@ else:
 ### EXPERIMENT SETTINGS
 # -------------
 repetitions = 1 # repeat the whole experiment and take the mean. Hurt GPU memory (ctrl F "x.to(device)")
-n = 3000 # Number of points to be projected
+n = 1000 # Number of points to be projected
 d_list = [100,320,1000,3200,10000,32000] # Their dimension
 p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
 r = .5 # proportion of ones in the data
@@ -115,7 +115,9 @@ for i in range(len(d_list)):
         print("p = "+str(p),end=".\n")
         print("Building OPU object...")
         e1_lgpu = e.energy()
+        torch.cuda.synchronize(device=device)
         obj = OPUModulePyTorch( d, p, initial_log_scale='auto', tunable_kernel=False, dtype=dtype, device=device)
+        torch.cuda.synchronize(device=device)
         e2_lgpu = e.energy()
         print("Done.")
         e_lgpu = (e2_lgpu-e1_lgpu)
@@ -129,7 +131,9 @@ for i in range(len(d_list)):
         if ngpus_torch>0 or (device=="cpu" and i+j<cpu_limit):
             print("Transfert to GPU...")
             e1_logpu = e.energy()
+            torch.cuda.synchronize(device=device)
             obj.to(device)
+            torch.cuda.synchronize(device=device)
             e2_logpu = e.energy()
             e1_lxgpu = e.energy()
             x_gpu = x.to(device)
@@ -138,8 +142,10 @@ for i in range(len(d_list)):
 
             print("Start matmuls...")
             e1_gpu = e.energy()
+            torch.cuda.synchronize(device=device)
             for repe in range(repetitions):
                 _ = obj(x_gpu[repe,:,:])
+            torch.cuda.synchronize(device=device)
             e2_gpu = e.energy()
             print("Done.")
 
