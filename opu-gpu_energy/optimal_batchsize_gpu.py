@@ -17,9 +17,9 @@ def sync():
 ### EXPERIMENT SETTINGS
 # -------------
 repetitions = 1 # repeat the whole experiment and take the mean. Hurt GPU memory (ctrl-F "x.to(device)")
-n_list = [1000*(i+1) for i in range(9)] # Number of points to be projected
-d_list = [10000,25000,32000] # Their dimension
-p_list = [10000,25000,32000] # Dimension of their projections # [100,320,1000]#
+n_list = tuple(1000*(i+1) for i in range(9)) # Number of points to be projected
+d_list = (10000,25000,32000) # Their dimension
+p_list = (10000,25000,32000) # Dimension of their projections # [100,320,1000]#
 r = .5 # proportion of ones in the data
 dtype = torch.float32 # torch.float16, even faster
 only_real = False # real weight instead of complex numbers.
@@ -41,8 +41,8 @@ for i in range(len(n_list)):
             print("Building the weight matrix...", end = " ")
             e1_lgpu = time.time()
             sync()
-            real = torch.randn(d,p,dtype=dtype,device=device) # complex weights
-            if not only_real:
+            real = torch.randn(d,p,dtype=dtype,device=device)
+            if not only_real: # complex weights
                 imaginary = torch.randn(d,p,dtype=dtype,device=device)
             sync()
             e2_lgpu = time.time()
@@ -80,11 +80,13 @@ for i in range(len(n_list)):
 
 import matplotlib
 import matplotlib.pyplot as plt
-    
+
+opu_frequency = 2000 
+
 for j in range(len(d_list)):
     for k in range(len(p_list)):
         plt.plot(n_list,f_gpu[:,j,k]/1000,label="(d,p) = ("+str(d_list[j])+","+str(p_list[k])+")")
-plt.plot(n_list,tuple(2 for i in range(len(n_list))),label="2 kHz")
+plt.plot(n_list,tuple(opu_frequency/1000 for i in range(len(n_list))),label=str(round(opu_frequency/1000,6))+" kHz")
 plt.legend()
 plt.title("Frequency of p×d matrix-vector multiplications\nw.r.t. to the batchsize n (kHz)")
 plt.xlabel("n")
@@ -92,5 +94,5 @@ plt.ylabel("f")
 plt.yscale("log")
 plt.savefig("./optimal_batchsize.png")
 
-#opu_frequency = 2000 
+#
 #print("Speed-up of an OPU at "+str(round(opu_frequency/1000,6))+" kHz: "+str(round(opu_frequency/frequence,6))+".")
