@@ -89,8 +89,8 @@ else:
 
 ### EXPERIMENT SETTINGS
 # -------------
-repetitions = 1 # repeat the whole experiment and take the mean. Hurt GPU memory (ctrl F "x.to(device)")
-n = 1000 # Number of points to be projected
+repetitions = 10 # repeat the whole experiment and take the mean. Hurt GPU memory (ctrl F "x.to(device)")
+n = 3000 # Number of points to be projected
 d_list = [100,320,1000,3200,10000,32000] # Their dimension
 p_list = [100,320,1000,3200,10000,32000] # Their targeted dimension
 r = .5 # proportion of ones in the data
@@ -136,7 +136,9 @@ for i in range(len(d_list)):
             torch.cuda.synchronize(device=device)
             e2_logpu = e.energy()
             e1_lxgpu = e.energy()
+            torch.cuda.synchronize(device=device)
             x_gpu = x.to(device)
+            torch.cuda.synchronize(device=device)
             e2_lxgpu = e.energy()
             print("Done.")
 
@@ -179,7 +181,8 @@ print("CPU and GPU computation time:")
 print(t_gpu)
 print("GPU computation energy (J):")
 print(E_gpu)
-
+print("CPU and GPU matrix-vector multiplication frequency (kHz):")
+print(n/t_gpu/1000)
 
 t,p,gpu = e.to_numpy()
 
