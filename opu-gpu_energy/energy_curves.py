@@ -33,10 +33,10 @@ def sync():
 
 ### EXPERIMENT SETTINGS
 # -------------
-repetitions = 8 # repeat the whole experiment and take the mean. Does't hurt GPU memory (ctrl-F "x.to(device)")
+repetitions = 150 # repeat the whole experiment and take the mean. Does't hurt GPU memory (ctrl-F "x.to(device)")
 x_variations = 2 # alternate variations during the repetitions. Hurt GPU memory (ctrl-F "x.to(device)")
 dry_runs = 2
-n = 3000 # Number of points to be projected
+n = 20 # Number of points to be projected
 d_list = tuple(i*2000+12000 for i in range(23)) # Their dimension 
 # Dimension of their projections is also d as what matters for
 # GPU times is input_dim * output_dim.
@@ -110,6 +110,7 @@ for i in range(len(d_list)):
         if not only_real:
             del imaginary
         torch.cuda.empty_cache()
+        sync()
         cgpu = (e2_cgpu-e1_cgpu).duration()/repetitions
         print("Done: "+str(round(cgpu,6))+" s in average for one repetition.")
 
@@ -125,6 +126,6 @@ for i in range(len(d_list)):
 
 resname = "cpu_" if device == "cpu" else "gpu_"
 
-save(RESULTS_DIR+resname+"time",res_time)
-save(RESULTS_DIR+resname+"ener",res_ener)
-save(RESULTS_DIR+"dimensions",array(d_list)) 
+save(RESULTS_DIR+resname+"time"+"_bs_"+str(n),res_time)
+save(RESULTS_DIR+resname+"ener"+"_bs_"+str(n),res_ener)
+save(RESULTS_DIR+"dimensions"+"_bs_"+str(n),array(d_list)) 

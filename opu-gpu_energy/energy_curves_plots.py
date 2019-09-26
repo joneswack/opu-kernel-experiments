@@ -1,4 +1,6 @@
+import matplotlib
 import matplotlib.pyplot as plt
+matplotlib.rc('text', usetex = True)
 import numpy as np
 
 OPU_POWER = 30 # W
@@ -39,12 +41,12 @@ elif gen == 3:
 
 gpu_model = "NVIDIA Tesla P100-PCIE-16GB" 
 
-d_list = np.load(RESULTS_DIR+"dimensions.npy")
+d_list = np.load(RESULTS_DIR+"dimensions"+"_bs_"+str(n)+".npy")
 
 # load timings and compute frequencies and consumption for GPU
-gpu_time = np.load(RESULTS_DIR+"gpu_time.npy")
+gpu_time = np.load(RESULTS_DIR+"gpu_time"+"_bs_"+str(n)+".npy")
 gpu_f = n/gpu_time
-gpu_ener = np.load(RESULTS_DIR+"gpu_ener.npy")
+gpu_ener = np.load(RESULTS_DIR+"gpu_ener"+"_bs_"+str(n)+".npy")
 # compute opu frequ, time & consumption according to the dimension
 # (independent of dim for gen==2)
 opu_f = np.array(tuple(1000*get_opu_speed(d,d,gen) for d in d_list))
@@ -52,28 +54,55 @@ opu_time = n/opu_f
 opu_ener = opu_time*OPU_POWER
 
 
+n2 = 1000
+# load timings and compute frequencies and consumption for GPU
+gpu_time2 = np.load(RESULTS_DIR+"gpu_time"+"_bs_"+str(n2)+".npy")
+gpu_ener2 = np.load(RESULTS_DIR+"gpu_ener"+"_bs_"+str(n2)+".npy")
+# compute opu frequ, time & consumption according to the dimension
+# (independent of dim for gen==2)
+opu_time2 = n2/opu_f
+opu_ener2 = opu_time2*OPU_POWER
+
+
+
 # Graphism
-def my_savefig(gpu_data,opu_data, unit, quantity,legend=False,**kwarg):
+def my_savefig(xaxis,gpu_data,opu_data, unit, quantity,legend=False,**kwarg):
     plt.figure(num=None, figsize=(6, 2), dpi=80, facecolor='w', edgecolor='k')
-    plt.plot(d_list,gpu_data,label="GPU")
-    plt.plot(d_list,opu_data,label="OPU")
-    plt.xlabel("Projection dimension")
-    plt.ylabel(quantity+"\n("+unit+")")
-    plt.tight_layout()
+    for i in range(len(gpu_data)):
+        gd = gpu_data[i]
+        od = opu_data[i]
+        if i==0:
+            line_g = axs[xaxis].plot(d_list,gd,label="GPU")
+            line_o = axs[xaxis].plot(d_list,od,label="OPU")
+        else:
+            axs[xaxis].plot(d_list,gd,linestyle=":",color = line_g[0].get_color())
+            axs[xaxis].plot(d_list,od,linestyle=":",color = line_o[0].get_color())
+    axs[xaxis].set_ylabel(quantity+"\n("+unit+")")
+    axs[xaxis].grid()
+
+    #plt.yscale("log")
+    #plt.xscale("log")
     if legend:
-        plt.legend()
-    plt.savefig('curve_'+quantity.lower().replace(" ", "_")+'.pdf', format="pdf",
-        transparent=False,bbox_inches=None, pad_inches=0.1,
-        metadata={
-            'Author': 'S. Marmin',
-            'Title': 'GPU and OPU '+quantity.lower()
-            },**kwarg)
-    plt.close()
+        axs[xaxis].legend()
 
 
-my_savefig(gpu_ener,opu_ener, "Joule", "Energy consumption",legend=True)
-my_savefig(gpu_time,opu_time, "s", "Computation time")
-my_savefig(gpu_f/1000,opu_f/1000, "kHz", "Multiplication frequency")
+plt.rcParams['font.family'] = "sans-serif"
+plt.rcParams['font.sans-serif'] = "Helvetica"
+plt.rcParams['text.usetex'] = False
+fig, axs = plt.subplots(2, sharex=True)
+plt.xlabel("Projection dimension $d$")
+my_savefig(0,[gpu_time,gpu_time2],[opu_time,opu_time2], "s", "Computation time",legend=True)
+my_savefig(1,[gpu_ener,gpu_ener2],[opu_ener,opu_ener2], "Joule", "Energy consumption")
+fig.tight_layout()
+
+
+fig.savefig('curve.pdf', format="pdf",
+    transparent=False,bbox_inches=None, pad_inches=0.1,
+    metadata={
+        'Author': 'S. Marmin',
+        'Title': 'GPU and OPU time computation and energy consumption'})
+
+
 
 
 #plt.plot(d_list,gpu_f/1000)

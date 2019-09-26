@@ -17,7 +17,7 @@ def sync():
 ### EXPERIMENT SETTINGS
 # -------------
 repetitions = 1 # repeat the whole experiment and take the mean. Hurt GPU memory (ctrl-F "x.to(device)")
-n_list = tuple(1000*(i+1) for i in range(9)) # Number of points to be projected
+n_list = tuple(10*(i+1) for i in range(90)) # Number of points to be projected
 d_list = (10000,25000,32000) # Their dimension
 p_list = (10000,25000,32000) # Dimension of their projections # [100,320,1000]#
 r = .5 # proportion of ones in the data
