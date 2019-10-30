@@ -5,6 +5,8 @@ import numpy as np
 import math
 import time
 
+from sklearn.kernel_approximation import RBFSampler
+
 class RandomProjectionModule(nn.Module):
     def __init__(self, input_features, output_features, mean=0., std=1., dtype=torch.FloatTensor):
         super(RandomProjectionModule, self).__init__()
@@ -13,12 +15,12 @@ class RandomProjectionModule(nn.Module):
 
         self.weight = nn.Parameter(torch.zeros(output_features, input_features).type(dtype), requires_grad=False)
         torch.nn.init.normal_(self.weight, mean, std)
-        
+
     def forward(self, input):
         return input.mm(self.weight.t())
 
 class OPUModulePyTorch(nn.Module):
-    def __init__(self, input_features, output_features, initial_log_scale='auto', tunable_kernel=False, dtype=torch.FloatTensor):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', tunable_kernel=False, exponent=1, dtype=torch.FloatTensor):
         super(OPUModulePyTorch, self).__init__()
 
         self.input_features = input_features
@@ -37,22 +39,35 @@ class OPUModulePyTorch(nn.Module):
             requires_grad=tunable_kernel
         )
         
+        self.exponent = exponent
+        
     def forward(self, input):
         out_real = self.proj_real(input) ** 2
         out_img = self.proj_im(input) ** 2
         
-        output = (out_real + out_img)
+        output = (out_real + out_img) ** self.exponent
         
         # we scale with the original scale factor (leads to kernel variance)
         return torch.exp(self.log_scale) * output
     
+    def get_projection_and_rawscale(self, data):
+        # norm of the inputs taken to the power of self.exponent
+        data_norm = data.norm(dim=1, keepdims=True)**(self.exponent*2)
+        projection = self.forward(data)
+        
+        raw_scale = (projection / data_norm).mean()
+        
+        return projection, raw_scale
+    
     
 class OPUModuleNumpy(object):
-    def __init__(self, input_features, output_features, initial_log_scale='auto', dtype='float32'):
+    def __init__(self, input_features, output_features, initial_log_scale='auto', exponent=1, dtype='float32'):
         super(OPUModuleNumpy, self).__init__()
         
         self.real_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
         self.img_matrix = np.random.normal(loc=0.0, scale=np.sqrt(0.5), size=(input_features, output_features)).astype(dtype)
+        
+        self.exponent = exponent
         
         if initial_log_scale == 'auto':
             self.log_scale = -0.5 * np.log(input_features)
@@ -66,13 +81,22 @@ class OPUModuleNumpy(object):
         out_real = self.project(data, self.real_matrix) ** 2
         out_img = self.project(data, self.img_matrix) ** 2
         
-        output = (out_real + out_img)
+        output = (out_real + out_img) ** self.exponent
 
         return np.exp(self.log_scale) * output
     
+    def get_projection_and_rawscale(self, data):
+        # norm of the inputs taken to the power of self.exponent
+        data_norm = np.linalg.norm(data, axis=1, keepdims=True)**(self.exponent*2)
+        projection = self.forward(data)
+        
+        raw_scale = (projection / data_norm).mean()
+        
+        return projection, raw_scale
+    
     
 class OPUModuleReal(object):
-    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, exposure_us=400):
+    def __init__(self, input_features, output_features, activation=None, bias=False, initial_log_scale=0, exponent=1, exposure_us=400):
         
         # One way to seed would be to move the camera ROI
         # self.random_mapping.opu.device.cam_ROI = ([x_offset, y_offset], [width, height])
@@ -84,6 +108,8 @@ class OPUModuleReal(object):
             self.log_scale = -0.5 * np.log(input_features)
         else:
             self.log_scale = initial_log_scale
+            
+        self.exponent = exponent
         
     def forward(self, data):
         from lightonml.projections.sklearn import OPUMap
@@ -93,13 +119,22 @@ class OPUModuleReal(object):
             random_mapping = OPUMap(opu=opu_dev, n_components=self.output_features, ndims=1)
             random_mapping.opu.device.exposure_us = self.eposure_us
             random_mapping.opu.device.frametime_us = self.eposure_us+100
-            output = random_mapping.transform(data.astype('uint8'))
+            output = random_mapping.transform(data.astype('uint8'))**self.exponent
         # random_mapping.opu.close()
         
         if self.log_scale != 0:
             output = output * np.exp(self.log_scale)
 
         return output
+    
+    def get_projection_and_rawscale(self, data):
+        # norm of the inputs taken to the power of self.exponent
+        data_norm = np.linalg.norm(data, axis=1, keepdims=True)**(self.exponent*2)
+        projection = self.forward(data)
+        
+        raw_scale = (projection / data_norm).mean()
+        
+        return projection, raw_scale
 
     
 class RBFModulePyTorch(nn.Module):
@@ -146,10 +181,10 @@ class RBFModulePyTorch(nn.Module):
         
 class RBFModuleNumpy(object):
     def __init__(self, input_features, output_features, log_lengthscale_init='auto', dtype='float32'):
-        super(OPUModuleNumpy, self).__init__()
+        super(RBFModuleNumpy, self).__init__()
         
         if log_lengthscale_init=='auto':
-            log_lengthscale_init = 0.5 * np.log(input_features.astype(dtype) / 2.)
+            log_lengthscale_init = 0.5 * np.log(input_features / 2.)
         
         gamma = 1. / (2.*np.exp(log_lengthscale_init)**2)
         self.sampler = RBFSampler(gamma=gamma, n_components=output_features, random_state=1)
@@ -169,12 +204,19 @@ projections = {
 }
     
 def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projection='opu',
-                          framework='pytorch', dtype=torch.FloatTensor, cuda=True):
+                          framework='pytorch', dtype=torch.FloatTensor, cuda=True,
+                          log_lengthscale_init='auto', exponent=1):
     since = time.time()
     
     projection_module = projections['_'.join([projection, framework])]
     
-    proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype)
+    if projection == 'rbf':
+        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, log_lengthscale_init=log_lengthscale_init)
+    elif projection == 'opu':
+        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, exponent=exponent)
+    else:
+        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype)
+    
     if cuda and framework=='pytorch':
         proj_mod = proj_mod.cuda()
     

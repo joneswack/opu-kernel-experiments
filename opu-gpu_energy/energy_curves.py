@@ -5,7 +5,7 @@ from time import time
 ### META SETTINGS
 # -------------
 RESULTS_DIR = "results_energy_curves/"
-DEVICE = 2 if torch.cuda.is_available() else "cpu" # Choose your GPU to monitor (nvidia-smi number)
+DEVICE = 3 if torch.cuda.is_available() else "cpu" # Choose your GPU to monitor (nvidia-smi number)
 # we handle devices at high level 'cause we read nvidia-smi command to get power info
 PERIOD = 1 # How often should we read (instant) power usage in seconds.
 SAVE = len(RESULTS_DIR)>0 # Save measurements on disk in a numpy array.
@@ -36,8 +36,9 @@ def sync():
 repetitions = 150 # repeat the whole experiment and take the mean. Does't hurt GPU memory (ctrl-F "x.to(device)")
 x_variations = 2 # alternate variations during the repetitions. Hurt GPU memory (ctrl-F "x.to(device)")
 dry_runs = 2
-n = 20 # Number of points to be projected
-d_list = tuple(i*2000+12000 for i in range(23)) # Their dimension 
+n = 1000 # Number of points to be projected
+# d_list = tuple(i*2000+12000 for i in range(23)) # Their dimension 
+d_list = [(i+1)*2000 for i in range(28)]
 # Dimension of their projections is also d as what matters for
 # GPU times is input_dim * output_dim.
 r = .5 # proportion of ones in the data
@@ -54,75 +55,88 @@ res_ener = array(tuple(nan for i in range(len(d_list))))
 
 for i in range(len(d_list)):
     d = d_list[i]
+    
     if d<=cpu_dlimit or device != "cpu":
-        p = d
-        print("Sampling x...", end = " ")
-        x = torch.distributions.Binomial(1,r).sample((x_variations,n,d)).type(dtype)
-        print("Done.")
+        
+        try:
+            p = d
+            print("Sampling x...", end = " ")
+            x = torch.distributions.Binomial(1,r).sample((x_variations,n,d)).type(dtype)
+            print("Done.")
 
-        print("Transfert "+str(x_variations)+" repetitions of a "+str(n)+"x"+str(d)+" matrix to GPU...")
-        e1_lxgpu = time()
-        sync()
-        x_gpu = x.to(device)
-        sync()
-        e2_lxgpu = time()
-        lxgpu = (e2_lxgpu-e1_lxgpu)/repetitions
-        print("Done: "+str(round(lxgpu,6))+" s in average for one repetition.")
-
-        print("Building the weight matrix...")
-        e1_lgpu = time()
-        sync()
-        real = torch.randn(d,p,dtype=dtype,device=device) # complex weights
-        if not only_real:
-            imaginary = torch.randn(d,p,dtype=dtype,device=device)
-        sync()
-        e2_lgpu = time()
-        lgpu = (e2_lgpu-e1_lgpu)
-        print("Done: "+str(round(lgpu,6))+" s.")
-
-        if dry_runs>0:
-            print("Start warmup (dry runs)...")
-            e1_cgpu = time()
+            print("Transfert "+str(x_variations)+" repetitions of a "+str(n)+"x"+str(d)+" matrix to GPU...")
+            e1_lxgpu = time()
             sync()
-            for repe in range(dry_runs):
+            x_gpu = x.to(device)
+            sync()
+            e2_lxgpu = time()
+            lxgpu = (e2_lxgpu-e1_lxgpu)/repetitions
+            print("Done: "+str(round(lxgpu,6))+" s in average for one repetition.")
+
+            print("Building the weight matrix...")
+            e1_lgpu = time()
+            sync()
+            real = torch.randn(d,p,dtype=dtype,device=device) # complex weights
+            if not only_real:
+                imaginary = torch.randn(d,p,dtype=dtype,device=device)
+            sync()
+            e2_lgpu = time()
+            lgpu = (e2_lgpu-e1_lgpu)
+            print("Done: "+str(round(lgpu,6))+" s.")
+
+            if dry_runs>0:
+                print("Start warmup (dry runs)...")
+                e1_cgpu = time()
+                sync()
+                for repe in range(dry_runs):
+                    if only_real:
+                        _ = (x_gpu[repe%x_variations,...].mm(real))**2
+                    else:
+                        _ = (x_gpu[repe%x_variations,...].mm(real))**2 + (x_gpu[repe%x_variations,...].mm(imaginary))**2
+                sync()
+                e2_cgpu = time()
+                cgpu = (e2_cgpu-e1_cgpu)/dry_runs
+                print("Done: "+str(round(cgpu,6))+" s in average for one repetition.")
+
+            print("Start measured matmuls...")
+            e1_cgpu = e.energy()
+            sync()
+            for repe in range(repetitions):
                 if only_real:
                     _ = (x_gpu[repe%x_variations,...].mm(real))**2
                 else:
                     _ = (x_gpu[repe%x_variations,...].mm(real))**2 + (x_gpu[repe%x_variations,...].mm(imaginary))**2
             sync()
-            e2_cgpu = time()
-            cgpu = (e2_cgpu-e1_cgpu)/dry_runs
+            e2_cgpu = e.energy()
+            del x
+            del x_gpu
+            del real
+            if not only_real:
+                del imaginary
+            torch.cuda.empty_cache()
+            sync()
+            cgpu = (e2_cgpu-e1_cgpu).duration()/repetitions
             print("Done: "+str(round(cgpu,6))+" s in average for one repetition.")
 
-        print("Start measured matmuls...")
-        e1_cgpu = e.energy()
-        sync()
-        for repe in range(repetitions):
-            if only_real:
-                _ = (x_gpu[repe%x_variations,...].mm(real))**2
-            else:
-                _ = (x_gpu[repe%x_variations,...].mm(real))**2 + (x_gpu[repe%x_variations,...].mm(imaginary))**2
-        sync()
-        e2_cgpu = e.energy()
-        del x
-        del x_gpu
-        del real
-        if not only_real:
-            del imaginary
-        torch.cuda.empty_cache()
-        sync()
-        cgpu = (e2_cgpu-e1_cgpu).duration()/repetitions
-        print("Done: "+str(round(cgpu,6))+" s in average for one repetition.")
+            frequence = n/cgpu
 
-        frequence = n/cgpu
+            print("The frequence of "+str(p)+"x"+str(d)+" matrix-vector multiplication is "+str(round(frequence/1000,6))+" kHz.")
 
-        print("The frequence of "+str(p)+"x"+str(d)+" matrix-vector multiplication is "+str(round(frequence/1000,6))+" kHz.")
+            opu_frequency = 2000 
+            print("Speed-up of an OPU at "+str(round(opu_frequency/1000,6))+" kHz: "+str(round(opu_frequency/frequence,6))+".")
 
-        opu_frequency = 2000 
-        print("Speed-up of an OPU at "+str(round(opu_frequency/1000,6))+" kHz: "+str(round(opu_frequency/frequence,6))+".")
-
-        res_time[i] = cgpu
-        res_ener[i] =  (e2_cgpu-e1_cgpu).select_gpu(str(DEVICE)).consumption()/repetitions
+            res_time[i] = cgpu
+            res_ener[i] =  (e2_cgpu-e1_cgpu).select_gpu(str(DEVICE)).consumption()/repetitions
+            
+        except RuntimeError:
+            torch.cuda.empty_cache()
+            sync()
+            
+            # res_time[i] = -1
+            # res_ener[i] = -1
+            
+            print('OOM Error for D={} projection dimensions'.format(d))
+            break
 
 resname = "cpu_" if device == "cpu" else "gpu_"
 

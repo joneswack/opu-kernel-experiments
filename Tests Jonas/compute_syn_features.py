@@ -11,7 +11,7 @@ from sklearn.linear_model import RidgeClassifier
 
 import logging
 
-save_name = 'opu_random_features'
+save_name = 'rbf_random_features'
 feature_dir = 'fashion_mnist_features_syn_opu'
 
 logger = logging.getLogger()

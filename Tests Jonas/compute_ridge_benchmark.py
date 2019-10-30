@@ -1,18 +1,20 @@
 import numpy as np
 import time
 import itertools
+import os
 import pandas as pd
 
 import torch
 
 from sklearn.linear_model import RidgeClassifier
+from sklearn.model_selection import GridSearchCV
 
 from random_features import project_big_np_matrix
 
 import logging
 import warnings
 
-save_name = 'ridge_benchmark_syn_opu_optimized'
+save_name = 'opu_degree_4_optimized'
 
 logger = logging.getLogger()
 logging.basicConfig(
@@ -20,8 +22,8 @@ logging.basicConfig(
     format='%(asctime)s [%(levelname)s] - %(message)s',
     filename='logs/{}.log'.format(save_name))
 
-import os
-os.environ["CUDA_VISIBLE_DEVICES"]="2"
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"]="1"
 
 
 ### Parameters:
@@ -68,178 +70,217 @@ def threshold_binarize(data, threshold):
 train_data_bin = threshold_binarize(train_data, threshold).astype('float32')
 test_data_bin = threshold_binarize(test_data, threshold).astype('float32')
 
-# compute number of active pixels
-active_pixels = np.vstack([train_data_bin, test_data_bin]).sum(axis=1, keepdims=True)
-
 ### Features to compute:
 
 from random_features import projections
 
-alphas = [10.0] # [0.1, 1, 10, 100]
-kernel_scales = [0.001] # [1, 0.1, 0.01, 0.001, 0.0001, 0.00001]
 output_dims = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000, 2000, 3000, 4000, 5000, 10000]
-seeds = [0, 1, 2, 3, 4]
-output_dim = 100000
+# output_dims = [5000]
+seeds = [0] # , 1, 2, 3, 4
+output_dim = 50000
 
 configurations = [
     {
         'kernel': 'opu',
         'framework': 'pytorch',
-        'cuda': True,
-        'dummy_input': [False, True], # [False, True],
-        'kernel_parameters': {
-            'activation': [None, 'sqrt', 'cos'],
-            'bias': [True, False]
-        }
+        'cuda': False,
+        'alphas': [10],
+        'scales': [0.001**2],
+        'dummies': [0],
+        'degrees': [2]
+        # 'degrees': [0.5],
+        # 'dummies': [20]
+#         'kernel_parameters': {
+#             'activation': [None], # [None, 'sqrt', 'cos'],
+#             'bias': [False] # [True, False]
+#         }
     }
+#     {
+#         'kernel': 'opu',
+#         'framework': 'pytorch',
+#         'cuda': True,
+#         'dummy_input': [False], # [False, True],
+#         'activation': 'sqrt',
+#         'kernel_parameters': {
+#             'activation': ['sqrt'], # [None, 'sqrt', 'cos'],
+#             'bias': [False] # [True, False]
+#         }
+#     }
 #     {
 #         'kernel': 'rbf',
 #         'framework': 'pytorch',
-#         'cuda': False,
+#         'cuda': True,
 #         'dummy_input': [False],
 #         'kernel_parameters': {
-#             'log_lengthscale_init': ['auto']
+#             'log_lengthscale_init': [np.log(np.sqrt(1./(2*0.006)))] # ['auto']
 #         }
 #     }
 ]
 
 ### Process the kernels one by one
 
-def train(data, target, alpha):
-    clf = RidgeClassifier(alpha=alpha)
-    
+def train(train_data, train_target, test_data, test_target, alphas):
+
     warned = False
+    
+    start_time = time.time()
+    
+    test_scores = []
     
     with warnings.catch_warnings(record=True) as caught_warnings:
         warnings.simplefilter("always")
-        clf.fit(data, target)
+        
+#         model = RidgeClassifier()
+#         parameters = {'alpha':alphas}
+#         if train_data.shape[1] <= 5000:
+#             clf = GridSearchCV(model, parameters, cv=2, n_jobs=len(alphas))
+#         else:
+#             # decrease memory usage for 5K+ dimensions
+#             clf = GridSearchCV(model, parameters, cv=2, n_jobs=1)
+        
+#         clf.fit(train_data, train_target)
+#         val_scores = clf.cv_results_['mean_test_score']
+        
+        val_scores = []
+        
+        for alpha in alphas:
+            # validation score
+            end_index = int(len(train_data) * 0.8)
+            
+            clf = RidgeClassifier(alpha=alpha)
+            clf.fit(train_data[:end_index], train_target[:end_index])
+            val_scores.append(clf.score(train_data[end_index:], train_target[end_index:]))
+        
+        for alpha in alphas:
+            clf = RidgeClassifier(alpha=alpha)
+            clf.fit(train_data, train_target)
+            test_scores.append(clf.score(test_data, test_target))
 
-        for warning in caught_warnings:
-            # if warning.category == UnsupportedWarning:
-            print(str(warning.message))
-            warned = True
+#         for warning in caught_warnings:
+#             # if warning.category == UnsupportedWarning:
+#             print(str(warning.message))
+#             warned = True
+    train_time = time.time() - start_time
     
-    return clf, warned
+    return val_scores, test_scores, caught_warnings, train_time
 
-def test(clf, data, target):
-    score = clf.score(data, target)
-    return score
+def evaluate_kernel(df, train_data, train_targets, test_data, test_targets, scales, alphas, kwargs):
+    for scale in scales:
+        validation_scores, test_scores, warnings, train_time = train(scale * train_data, train_targets, scale * test_data, test_targets, alphas)
+
+        logger.info('Scale: {}'.format(scale))
+        logger.info('Training Time: {}'.format(train_time))
+        logger.info('Warned: {}'.format(len(warnings)))
+
+        entries = zip(validation_scores, test_scores, config['alphas'])
+
+        for val_score, test_score, alpha in entries:
+            logger.info('Alpha: {}'.format(alpha))
+            logger.info('Val Score: {}'.format(val_score))
+            logger.info('Test Score: {}'.format(test_score))
+            
+            param_dict = {
+                'validation_score': val_score,
+                'test_score': test_score,
+                'training_time': train_time,
+                'alpha': alpha,
+                'scale': scale,
+                'warnings': len(warnings)
+            }
+            
+            param_dict = {**param_dict, **kwargs}
+
+            df = df.append(param_dict, ignore_index=True)
+        
+    return df
 
 # for seed in seeds
 
 df = pd.DataFrame()
 
-num_dummies = sum([len(config['dummy_input']) for config in configurations])
-total_number_macro = num_dummies * len(alphas) * len(output_dims) * len(kernel_scales)
+total_number_opu_kernels = len(configurations[0]['degrees']) * len(configurations[0]['dummies'])
+total_number_kernels = total_number_opu_kernels * len(output_dims) * len(seeds)
 i = 0
 
 for config in configurations:
-    for dummy in config['dummy_input']:
-        # generate 100K dimensions once
-        logger.info('-----------')
-        logger.info('Kernel: {}'.format(config['kernel']))
-        logger.info('Dummy: {}'.format(dummy))
-
-        input_dim = len(train_data_bin[0])
-
-        if dummy:
-            input_dim += 1
-
-        data = np.vstack([train_data_bin[:N], test_data_bin])
-
-        if dummy:
-            data = np.hstack([np.ones((len(data), 1)).astype('float32'), data])
+    for degree in config['degrees']:
+        for dummy in config['dummies']:
             
-            
-        print('Computing kernel features...')
+            # generate 100K dimensions once
+            logger.info('-----------')
+            logger.info('Kernel: {}'.format(config['kernel']))
+            logger.info('Dummy: {}'.format(dummy))
+            logger.info('Degree: {}'.format(degree))
 
-        proj_data, proj_time = project_big_np_matrix(
-                                    data, out_dim=output_dim,
-                                    chunk_size=5000, projection=config['kernel'],
-                                    framework=config['framework'], dtype=torch.FloatTensor,
-                                    cuda=config['cuda'])
-        print('Done!')
+            data = np.vstack([train_data_bin[:N], test_data_bin])
 
-        logger.info('Projection Time: {}'.format(proj_time))
+            if dummy > 0:
+                data = np.hstack([np.ones((len(data), 1)).astype('float32') * dummy, data])
+
+
+            print('Computing kernel features...')
+
+            if config['kernel'] == 'rbf':
+                print('Initializing RBF lengthscale')
+                log_lengthscale_init = config['kernel_parameters']['log_lengthscale_init'][0]
+            else:
+                log_lengthscale_init = 'auto'
+
+            proj_data, proj_time = project_big_np_matrix(
+                                        data, out_dim=output_dim, chunk_size=5000, projection=config['kernel'],
+                                        framework=config['framework'], dtype=torch.FloatTensor,
+                                        cuda=config['cuda'], log_lengthscale_init=log_lengthscale_init,
+                                        exponent=degree)
+            print('Done!')
+
+            logger.info('Projection Time: {}'.format(proj_time))
         
-        # compute the raw scale of the projections (2*sigma^2)
-        raw_scale = (np.vstack([train_data, test_data]) / active_pixels).mean()
+            # compute the raw scale of the projections (2*sigma^2)
+            if config['kernel'] == 'opu':
+                data_norm = np.linalg.norm(data, axis=1, keepdims=True)**(degree*2)
+                raw_scale = (proj_data / data_norm).mean()
+#                 elif config['activation'] == 'cos':
+#                     bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_dim))
+#                     proj_data = np.cos(proj_data + bias)
+#                     raw_scale = 1.
+            else:
+                raw_scale = 1.
         
-        for scale in kernel_scales:
-            factor = scale / raw_scale
-            proj_data *= factor
+            proj_data = proj_data / raw_scale
         
-            for alpha in alphas:
-                for output_dim in output_dims:
-                    for seed in seeds:
-                        logger.info('Alpha: {}'.format(alpha))
-                        logger.info('Output dim.: {}'.format(output_dim))
-                        logger.info('Seed: {}'.format(seed))
+            for output_dim in output_dims:
+                for seed in seeds:
+                    logger.info('Output dim.: {}'.format(output_dim))
+                    logger.info('Seed: {}'.format(seed))
 
-                        # artificial seeding through oversampling opu features
-                        start_index = seed * output_dim
-                        end_index = (seed+1) * output_dim
+                    # artificial seeding through oversampling opu features
+                    start_index = seed * output_dim
+                    end_index = (seed+1) * output_dim
 
-                        train_data_subsampled = proj_data[:N, start_index:end_index]
-                        test_data_subsampled = proj_data[N:, start_index:end_index]
-
-                        # Going through all combinations of kernel parameters
-                        kernel_parameters = config['kernel_parameters']
-                        # list of lists
-                        all_parameters = [kernel_parameters[key] for key in sorted(kernel_parameters.keys())]
-                        all_combinations = list(itertools.product(*all_parameters))
-                        all_combinations_dicts = []
-                        for combo in all_combinations:
-                            combo_dict = dict(list(zip(sorted(kernel_parameters.keys()), combo)))
-                            all_combinations_dicts.append(combo_dict)
-
-                        for combo_dict in all_combinations_dicts:
-                            for key, item in combo_dict.items():
-                                logger.info('{}: {}'.format(key, item))
-
-                            since = time.time()
-
-                            if 'bias' in combo_dict:
-                                if combo_dict['bias']:
-                                    bias = np.random.uniform(low=0.0, high=2 * np.pi, size=(1, output_dim))
-                                    train_data_subsampled += bias
-                                    test_data_subsampled += bias
-
-                            if 'activation' in combo_dict:
-                                if combo_dict['activation'] == 'sqrt':
-                                    train_data_subsampled = np.sqrt(train_data_subsampled)
-                                    test_data_subsampled = np.sqrt(test_data_subsampled)
-                                elif combo_dict['activation'] == 'cos':
-                                    train_data_subsampled = np.cos(train_data_subsampled)
-                                    test_data_subsampled = np.cos(test_data_subsampled)
-
-                            clf, warned = train(train_data_subsampled, train_labels[:N], alpha)
-
-                            train_time = time.time() - since
-
-                            score = test(clf, test_data_subsampled, test_labels)
-                            logger.info('Score: {}'.format(score))
-                            logger.info('Training Time: {}'.format(train_time))
-                            logger.info('Warned: {}'.format(warned))
-
-                            param_dict = {
-                                'kernel': config['kernel'],
-                                'framework': config['framework'],
-                                'test_score': score,
-                                'training_time': train_time,
-                                'alpha': alpha,
-                                'scale': scale,
-                                'output_dim': output_dim,
-                                'dummy_input': True if dummy else False,
-                                'seed': seed,
-                                'inversion_warning': warned
-                            }
-
-                            param_dict = {**param_dict, **combo_dict}
-
-                            df = df.append(param_dict, ignore_index=True)
+                    train_data_subsampled = proj_data[:N, start_index:end_index]
+                    test_data_subsampled = proj_data[N:, start_index:end_index]
+                    
+                    kwargs = {
+                        'kernel': config['kernel'],
+                        'output_dim': output_dim,
+                        'dummy': dummy,
+                        'degree': degree,
+                        'seed': seed
+                    }
+                    
+                    logger.info('Degree: {}'.format(degree))
+                    logger.info('Dummy: {}'.format(dummy))
+                    logger.info('Seed: {}'.format(seed))
+                    
+                    df = evaluate_kernel(
+                            df,
+                            train_data_subsampled, train_labels,
+                            test_data_subsampled, test_labels,
+                            config['scales'], config['alphas'], kwargs
+                    )
+                    
                     i = i + 1
-                    print('Finished {} / {} kernels (incl. seeds)'.format(i, total_number_macro))
+                    print('Finished {} / {} kernels'.format(i, total_number_kernels))
                     # we update the dataframe after processing one set of seeds
                     df.to_csv(os.path.join('csv', save_name + '.csv'), index=False)
 print('Done!')

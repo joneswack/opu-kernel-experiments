@@ -15,7 +15,6 @@ class RegressionModel(nn.Module):
         return output
     
 class BasicDataset(Dataset):
-    """Face Landmarks dataset."""
 
     def __init__(self, X, Y):
         """
