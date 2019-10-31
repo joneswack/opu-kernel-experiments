@@ -3,6 +3,7 @@
 Tests Jonas/fashion_mnist_features_*
 Tests Jonas/conv_features/*
 Tests Jonas/data/*
+.vscode/*
 
 
 # Byte-compiled / optimized / DLL files

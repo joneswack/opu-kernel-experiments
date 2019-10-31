@@ -1,0 +1,7 @@
+{
+    "train_data": "../../datasets/export/fashion_mnist/numpy/train_data_fashion_mnist.npy",
+    "test_data": "../../datasets/export/fashion_mnist/numpy/test_data_fashion_mnist.npy",
+    "train_labels": "../../datasets/export/fashion_mnist/numpy/train_targets_fashion_mnist.npy",
+    "test_labels": "../../datasets/export/fashion_mnist/numpy/test_targets_fashion_mnist.npy",
+    "binary_threshold": 10
+}
