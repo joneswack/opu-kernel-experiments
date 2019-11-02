@@ -52,6 +52,9 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
 
     chunk_results = []
 
+    print('Computing matrix-matrix product...')
+    since = time.time()
+
     for i in range(num_chunks):
         if i < (num_chunks - 1):
             output_dim = Y_column_chunk_size
@@ -80,7 +83,7 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
         with torch.no_grad():
             results = []
             for idx, batch in enumerate(dataloader):
-                print('Progress: {}'.format(idx / len(dataloader)))
+                print('Progress: {0:.2f}%'.format(idx / len(dataloader) * 100))
                 # There are no labels!
                 batch = batch[0]
 
@@ -100,6 +103,7 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
                                 else result for result in results], dim=0, out=None)
         chunk_results.append(results.numpy())
 
+    print('Elapsed: {0:.2f} seconds'.format(time.time() - since))
     return np.hstack(chunk_results)
 
 
