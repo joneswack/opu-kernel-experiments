@@ -289,7 +289,7 @@ def rbf_kernel(X, Y=None, var=1., gamma=1.0, dtype=torch.FloatTensor, gpu_ids=[1
 
 
     kernel *= gamma
-    kernel = np.exp(-kernel)
+    kernel = var * np.exp(-kernel)
 
     return kernel
 

@@ -22,8 +22,11 @@ CAUTION:
     The right choice of kernel scale and diagonal noise improves convergence significantly!
 """
 
-def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, num_gpus=3):
+def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, gpu_ids=[1,2,3]):
     N = np.shape(K)[0]
+    num_gpus = len(gpu_ids)
+    if num_gpus > 0:
+        main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
     
     if init is None:
         init = np.zeros(Y.shape)
@@ -46,11 +49,11 @@ def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, num
             # this allows us to store very large kernel matrices
             if i < (num_gpus-1):
                 Ks.append(
-                    K[i*split_size:(i+1)*split_size].to('cuda:' + str(i))
+                    K[i*split_size:(i+1)*split_size].to('cuda:' + str(gpu_ids[i]))
                 )
             else:
                 Ks.append(
-                    K[i*split_size:].to('cuda:' + str(i))
+                    K[i*split_size:].to('cuda:' + str(gpu_ids[i]))
                 )
 
     iterations = []
@@ -76,9 +79,9 @@ def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, num
 
         if num_gpus > 0:
             # we copy p to every gpu unit
-            x = x.to('cuda:0')
-            r = r.to('cuda:0')
-            ps = [p.to('cuda:' + str(i)) for i in range(num_gpus)]
+            x = x.to(main_gpu)
+            r = r.to(main_gpu)
+            ps = [p.to('cuda:' + str(gpu_ids[i])) for i in range(num_gpus)]
         else:
             ps = [p]
 
@@ -87,7 +90,7 @@ def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, num
                 if num_gpus > 0:
                     # we compute one split of Kp on every GPU
                     # apart from memory savings, this gives a bit of acceleration
-                    Kps = [Ks[i].mm(ps[i]).to('cuda:0') for i in range(num_gpus)]
+                    Kps = [Ks[i].mm(ps[i]).to(main_gpu) for i in range(num_gpus)]
                     Kp = torch.cat(Kps, dim=0)
                 else:
                     Kp = K.mm(ps[0])
@@ -110,7 +113,7 @@ def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, num
 
                 if num_gpus > 0:
                     # we need to send the updated p to each gpu
-                    ps = [ps[0].to('cuda:' + str(i)) for i in range(num_gpus)]
+                    ps = [ps[0].to('cuda:' + str(gpu_ids[i])) for i in range(num_gpus)]
 
                 t = t + 1
 
