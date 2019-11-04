@@ -8,7 +8,14 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from dataset import get_dataloader
+from data import load_gpu_config, get_dataloader
+
+# load general GPU parameters
+gpu_params = load_gpu_config('Tests Jonas/config/gpu.json')
+gpu_ids = gpu_params['active_gpus']
+Y_MEMORY_LIMIT = gpu_params['memory_limit_gb']
+Y_CHUNK_SIZE = gpu_params['preferred_chunk_size_gb']
+batchsize = gpu_params["matrix_prod_batch_size"]
 
 
 class PairwiseDistances(nn.Module):
@@ -30,7 +37,7 @@ class PairwiseDistances(nn.Module):
 
 
 
-def iterate_over_column_chunks(Y, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6):
+def iterate_over_column_chunks(Y):
     """
     This function is a generator that divides the matrix Y into column-wise chunks.
     It yields (start index, offset) pairs.
@@ -64,8 +71,7 @@ def iterate_over_column_chunks(Y, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6):
         yield (i*Y_column_chunk_size, output_dim)
 
 
-def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
-                                gpu_ids=[1,2,3], batchsize=3000, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6):
+def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor):
     """
     This function computes X @ Y in a memory-efficient way while making use of multiple GPUs.
     Y is split into chunks separated between columns. Only one chunk is kept in GPU memory at a time.
@@ -83,7 +89,6 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
     Otherwise, the GPU ids to be used should be passed in the list.
     """
 
-
     if len(gpu_ids) > 0:
         main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
     cpu = torch.device('cpu')
@@ -95,7 +100,7 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
     print('Computing matrix-matrix product...')
     since = time.time()
 
-    for start_index, offset in iterate_over_column_chunks(Y, Y_MEMORY_LIMIT=Y_MEMORY_LIMIT, Y_CHUNK_SIZE=Y_CHUNK_SIZE):
+    for start_index, offset in iterate_over_column_chunks(Y):
 
         mat_mult = nn.Linear(in_features=Y.shape[0], out_features=offset, bias=False)
         # The weights need to be transposed (PyTorch convention)
@@ -138,8 +143,7 @@ def large_matrix_matrix_product(X, Y, bias=0, p=1., dtype=torch.FloatTensor,
     return np.hstack(chunk_results)
 
 
-def large_pairwise_distances(X, Y,  p=2., squared=True, dtype=torch.FloatTensor,
-                                gpu_ids=[1,2,3], batchsize=3000, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6):
+def large_pairwise_distances(X, Y,  p=2., squared=True, dtype=torch.FloatTensor):
     """
     This function computes pairwise distances between X and Y in a memory-efficient way.
     It makes use of multiple GPUs.
@@ -165,7 +169,7 @@ def large_pairwise_distances(X, Y,  p=2., squared=True, dtype=torch.FloatTensor,
     print('Computing pairwise distances...')
     since = time.time()
 
-    for start_index, offset in iterate_over_column_chunks(Y, Y_MEMORY_LIMIT=Y_MEMORY_LIMIT, Y_CHUNK_SIZE=Y_CHUNK_SIZE):
+    for start_index, offset in iterate_over_column_chunks(Y):
 
         # The weights need to be transposed (PyTorch convention)
         pd_module = PairwiseDistances(torch.from_numpy(
@@ -202,7 +206,7 @@ def large_pairwise_distances(X, Y,  p=2., squared=True, dtype=torch.FloatTensor,
     return np.hstack(chunk_results)
 
 
-def opu_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor, gpu_ids=[1,2,3]):
+def opu_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor):
     """
     This function computes the OPU kernel for even degrees.
     It also supports large-scale GPU computations. This should be used when Y is large.
@@ -245,7 +249,7 @@ def opu_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor, gp
     return kernel
 
 
-def polynomial_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor, gpu_ids=[1,2,3]):
+def polynomial_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor):
     """
     This function computes the polynomial kernel.
     It also supports large-scale GPU computations. This should be used when Y is large.
@@ -260,15 +264,14 @@ def polynomial_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTen
     if Y is None:
         Y = X
 
-    xTy = large_matrix_matrix_product(X, Y.T, bias=bias, p=degree, dtype=torch.FloatTensor,
-                                        gpu_ids=gpu_ids, batchsize=3000, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6)
+    xTy = large_matrix_matrix_product(X, Y.T, bias=bias, p=degree, dtype=torch.FloatTensor)
 
     kernel *= var
     
     return kernel
 
 
-def rbf_kernel(X, Y=None, var=1., lengthscale='auto', dtype=torch.FloatTensor, gpu_ids=[1,2,3]):
+def rbf_kernel(X, Y=None, var=1., lengthscale='auto', dtype=torch.FloatTensor):
     """
     This function computes the RBF kernel.
     It also supports large-scale GPU computations. This should be used when Y is large.
@@ -287,8 +290,7 @@ def rbf_kernel(X, Y=None, var=1., lengthscale='auto', dtype=torch.FloatTensor, g
     if lengthscale == 'auto':
         lengthscale = np.sqrt(X.shape[1] / 2)
 
-    kernel = large_pairwise_distances(X, Y, p=2., squared=True, dtype=torch.FloatTensor,
-                                        gpu_ids=gpu_ids, batchsize=3000, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6)
+    kernel = large_pairwise_distances(X, Y, p=2., squared=True, dtype=torch.FloatTensor)
 
 
     kernel /= (2 * lengthscale**2)
@@ -338,7 +340,7 @@ if __name__ == '__main__':
 
     from sklearn.metrics.pairwise import rbf_kernel as skl_rbf_kernel
 
-    result = rbf_kernel(X, Y, gpu_ids=[])
-    result2 = skl_rbf_kernel(X, Y=Y, lengthscale=np.sqrt(0.5))
+    result = rbf_kernel(X, Y, lengthscale=np.sqrt(0.5))
+    result2 = skl_rbf_kernel(X, Y=Y, gamma=1.)
 
     print('Error', np.mean(np.abs(result - result2)))

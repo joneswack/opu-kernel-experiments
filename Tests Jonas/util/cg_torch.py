@@ -2,6 +2,11 @@ import numpy as np
 import torch
 import time
 
+# load general GPU parameters
+from data import load_gpu_config
+gpu_params = load_gpu_config('Tests Jonas/config/gpu.json')
+gpu_ids = gpu_params['active_gpus']
+
 """
 Solve linear system using the conjugate gradient (CG) method.
 Params:
@@ -22,7 +27,7 @@ CAUTION:
     The right choice of kernel scale and diagonal noise improves convergence significantly!
 """
 
-def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000, gpu_ids=[1,2,3]):
+def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
     N = np.shape(K)[0]
     num_gpus = len(gpu_ids)
     if num_gpus > 0:

@@ -309,7 +309,7 @@ projections = {
 }
 
     
-def project_np_data(data, out_dim=int(1e4), chunk_size=int(1e4), projection='opu',
+def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection='opu',
                           framework='pytorch', dtype=torch.FloatTensor, cuda=False,
                           lengthscale='auto', scale=1., degree=2., bias=0):
     """
@@ -331,11 +331,11 @@ def project_np_data(data, out_dim=int(1e4), chunk_size=int(1e4), projection='opu
     projection_module = projections['_'.join([projection, framework])]
     
     if projection == 'rbf':
-        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, lengthscale=lengthscale, scale=scale)
+        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype, lengthscale=lengthscale, scale=scale)
     elif projection == 'opu':
-        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, scale=scale, bias=bias, degree=degree)
+        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype, scale=scale, bias=bias, degree=degree)
     else:
-        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype)
+        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype)
     
     if cuda and framework=='pytorch':
         proj_mod = proj_mod.cuda()
