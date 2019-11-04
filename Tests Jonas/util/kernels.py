@@ -221,7 +221,7 @@ def opu_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTensor, gp
         Y = X
 
     kernel = 0
-    s = degree // 2
+    s = int(degree // 2)
     s_fac_sq = math.factorial(s)**2
 
     xTy = large_matrix_matrix_product(X, Y.T, bias=bias, p=2., dtype=torch.FloatTensor,
@@ -268,14 +268,14 @@ def polynomial_kernel(X, Y=None, var=1., bias=0, degree=2., dtype=torch.FloatTen
     return kernel
 
 
-def rbf_kernel(X, Y=None, var=1., gamma=1.0, dtype=torch.FloatTensor, gpu_ids=[1,2,3]):
+def rbf_kernel(X, Y=None, var=1., lengthscale='auto', dtype=torch.FloatTensor, gpu_ids=[1,2,3]):
     """
     This function computes the RBF kernel.
     It also supports large-scale GPU computations. This should be used when Y is large.
 
     X and Y are input matrices of dimension (n_samples x feature_dimension).
     var is the scaling factor of the OPU kernel normally defined by the scaling of the optical RFs.
-    gamma is defines the lengthscale of the kernel.
+    if lengthscale is set to 'auto', it is set to sqrt(feature_dim / 2), which makes sense for std-normalized features
 
     For CPU computation, please use gpu_ids=[].
     Otherwise, the GPU ids to be used should be passed in the list.
@@ -284,11 +284,14 @@ def rbf_kernel(X, Y=None, var=1., gamma=1.0, dtype=torch.FloatTensor, gpu_ids=[1
     if Y is None:
         Y = X
 
+    if lengthscale == 'auto':
+        lengthscale = np.sqrt(X.shape[1] / 2)
+
     kernel = large_pairwise_distances(X, Y, p=2., squared=True, dtype=torch.FloatTensor,
                                         gpu_ids=gpu_ids, batchsize=3000, Y_MEMORY_LIMIT = 12, Y_CHUNK_SIZE = 6)
 
 
-    kernel *= gamma
+    kernel /= (2 * lengthscale**2)
     kernel = var * np.exp(-kernel)
 
     return kernel
@@ -336,6 +339,6 @@ if __name__ == '__main__':
     from sklearn.metrics.pairwise import rbf_kernel as skl_rbf_kernel
 
     result = rbf_kernel(X, Y, gpu_ids=[])
-    result2 = skl_rbf_kernel(X, Y=Y, gamma=1.0)
+    result2 = skl_rbf_kernel(X, Y=Y, lengthscale=np.sqrt(0.5))
 
     print('Error', np.mean(np.abs(result - result2)))

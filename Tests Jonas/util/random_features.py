@@ -25,39 +25,40 @@ class OPUModulePyTorch(nn.Module):
     Simulated Optical Random Features for the OPU kernel.
 
     scale is the sqrt(var) of the kernel, default: 1.
-    bias is the same as for the polynomial kernel, default: 0.
-    exponent is the exponent after the modulous operation, default: 2 (m in the paper).
+    bias is similar as the one for the polynomial kernel, default: 0.
+    However, it ends up being squared in the resulting kernel: x' @ y' = bias**2 * (x @ y)
+    degree is the degree after the modulous operation, default: 2 (m in the paper).
 
     if tunable_kernel is set to True, the scale is tuned.
     """
 
-    def __init__(self, input_features, output_features, scale=1., bias=0, exponent=2., tunable_kernel=False, dtype=torch.FloatTensor):
+    def __init__(self, input_features, output_features, scale=1., bias=0, degree=2., tunable_kernel=False, dtype=torch.FloatTensor):
         super(OPUModulePyTorch, self).__init__()
 
         self.input_features = input_features + 1 # to account for the bias
         self.output_features = output_features
-        
-        # initialize the scale to 1/sqrt(output_features) * scale
-        self.log_scale = -0.5 * np.log(output_features) + np.log(scale)
         
         self.proj_real = RandomProjectionModule(self.input_features, self.output_features,
                             mean=0., std=np.sqrt(0.5), dtype=dtype)
         self.proj_im = RandomProjectionModule(self.input_features, self.output_features,
                             mean=0., std=np.sqrt(0.5), dtype=dtype)
         
+        # initialize the scale to 1/sqrt(output_features) * scale
+        self.log_scale = -0.5 * np.log(output_features) + np.log(scale)
         # log makes sure that scale stays positive during optimization
         self.log_scale = nn.Parameter(
-            torch.ones(1).type(dtype) * log_scale,
+            torch.ones(1).type(dtype) * self.log_scale,
             requires_grad=tunable_kernel
         )
 
         self.log_bias = nn.Parameter(
-            torch.ones(1).type(dtype) * np.log(bias),
+            # add noise to avoid log(0)
+            torch.ones(1).type(dtype) * np.log(bias + 1e-9),
             requires_grad=tunable_kernel
         )
         
-        self.log_exponent = nn.Parameter(
-            torch.ones(1).type(dtype) * np.log(exponent),
+        self.log_degree = nn.Parameter(
+            torch.ones(1).type(dtype) * np.log(degree),
             requires_grad=tunable_kernel
         )
 
@@ -71,7 +72,7 @@ class OPUModulePyTorch(nn.Module):
         out_real = self.proj_real(data) ** 2
         out_img = self.proj_im(data) ** 2
         
-        output = (out_real + out_img) ** (torch.exp(self.log_exponent) // 2)
+        output = (out_real + out_img) ** (torch.exp(self.log_degree) // 2)
         
         # we scale with the original scale factor (leads to kernel variance)
         return torch.exp(self.log_scale) * output
@@ -82,11 +83,12 @@ class OPUModuleNumpy(object):
     Simulated Optical Random Features for the OPU kernel.
 
     scale is the sqrt(var) of the kernel, default: 1.
-    bias is the same as for the polynomial kernel, default: 0.
-    exponent is the exponent after the modulous operation, default: 2 (m in the paper).
+    bias is similar as the one for the polynomial kernel, default: 0.
+    However, it ends up being squared in the resulting kernel: x' @ y' = bias**2 * (x @ y)
+    degree is the degree after the modulous operation, default: 2 (m in the paper).
     """    
 
-    def __init__(self, input_features, output_features, scale=1., bias=0, exponent=2., dtype='float32'):
+    def __init__(self, input_features, output_features, scale=1., bias=0, degree=2., dtype='float32'):
         super(OPUModuleNumpy, self).__init__()
 
         self.input_features = input_features + 1 # to account for the bias
@@ -98,20 +100,20 @@ class OPUModuleNumpy(object):
         
         self.scale = scale / np.sqrt(output_features)
         self.bias = bias
-        self.exponent = exponent
+        self.degree = degree
 
         self.dtype = dtype
         
     def forward(self, data):
         # append bias to the data
-        data = data.astype(self.dtype)
-        bias_vector = np.ones((len(data), 1)).astype(self.dtype) * self.bias
+        bias_vector = (np.ones((len(data), 1)) * self.bias)
         data = np.hstack([data, bias_vector])
+        data = data.astype(self.dtype)
 
         out_real = data.dot(self.real_matrix) ** 2
         out_img = data.dot(self.img_matrix) ** 2
         
-        output = (out_real + out_img) ** (self.exponent // 2)
+        output = (out_real + out_img) ** (self.degree // 2)
 
         return self.scale * output
     
@@ -121,9 +123,10 @@ class OPUModuleReal(object):
     Optical Random Features for the OPU kernel.
 
     scale is the sqrt(var) of the kernel, default: 1.
-    bias is the same as for the polynomial kernel, default: 0.
+    bias is similar as the one for the polynomial kernel, default: 0.
+    However, it ends up being squared in the resulting kernel: x' @ y' = bias**2 * (x @ y)
     However, it needs to be integer-valued for the OPU!
-    exponent is the exponent after the modulous operation, default: 2 (m in the paper).
+    degree is the degree after the modulous operation, default: 2 (m in the paper).
     exposure_us is the exposure time of the camera in micro-seconds.
 
     The optical random features are VERY tricky!
@@ -138,7 +141,7 @@ class OPUModuleReal(object):
     The input for the OPU needs to be in binary format!
     """
 
-    def __init__(self, input_features, output_features, scale=1., bias=0, exponent=2., exposure_us=400):
+    def __init__(self, input_features, output_features, scale=1., bias=0, degree=2., exposure_us=400):
         
         
 
@@ -150,7 +153,7 @@ class OPUModuleReal(object):
 
         self.scale = scale / np.sqrt(output_features)
         self.bias = bias
-        self.exponent = exponent
+        self.degree = degree
 
     def estimate_opu_variance(self, data, projection):
         """
@@ -195,7 +198,7 @@ class OPUModuleReal(object):
         output = output / opu_var * 0.5
         # => We have sampled all real entries from N(0, 0.5) like for the simulated device!
 
-        output = output**(self.exponent // 2)
+        output = output**(self.degree // 2)
 
         return self.scale * output
 
@@ -205,7 +208,7 @@ class RBFModulePyTorch(nn.Module):
     Random Fourier Features for the RBF kernel.
     
     lengthscale is the initialization value for the lengthscale.
-    if 'auto', it is initialized to sqrt(n_features / 2) (sklearn convention)
+    if 'auto', it is initialized to sqrt(n_features / 2), which makes sense for std-normalized features.
 
     scale is the sqrt(var) of the kernel, default: 1.
 
@@ -245,7 +248,7 @@ class RBFModulePyTorch(nn.Module):
         
         self.log_scale = nn.Parameter(
             # log makes sure that scale stays positive during optimization
-            torch.ones(1).type(dtype) * log_scale,
+            torch.ones(1).type(dtype) * self.log_scale,
             requires_grad=tunable_kernel
         )
         
@@ -263,7 +266,7 @@ class RBFModuleNumpy(object):
     Random Fourier Features for the RBF kernel.
     
     lengthscale is the initialization value for the lengthscale.
-    if 'auto', it is initialized to sqrt(n_features / 2) (sklearn convention)
+    if 'auto', it is initialized to sqrt(n_features / 2), which makes sense for std-normalized features.
 
     scale is the sqrt(var) of the kernel, default: 1.
     """
@@ -278,10 +281,14 @@ class RBFModuleNumpy(object):
 
         self.scale = scale / np.sqrt(output_features)
 
-        self.projection_matrix = np.random.normal(size=(input_features, output_features))
-        self.bias = np.random.uniform(low=0.0, high=2*np.pi, size=(output_features))
+        self.projection_matrix = np.random.normal(size=(input_features, output_features)).astype(dtype)
+        self.bias = np.random.uniform(low=0.0, high=2*np.pi, size=(output_features)).astype(dtype)
+
+        self.dtype = dtype
         
     def forward(self, data):
+        data = data.astype(self.dtype)
+
         data = data / self.lengthscale
 
         output = data @ self.projection_matrix
@@ -289,6 +296,8 @@ class RBFModuleNumpy(object):
         output = np.cos(output)
 
         output *= np.sqrt(2.) * self.scale
+
+        return output
 
 
 projections = {
@@ -299,19 +308,32 @@ projections = {
     'rbf_numpy': RBFModuleNumpy
 }
 
-## TODO: project_big_np_matrix + Tests in main!
     
-def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projection='opu',
-                          framework='pytorch', dtype=torch.FloatTensor, cuda=True,
-                          log_lengthscale_init='auto', exponent=2):
+def project_np_data(data, out_dim=int(1e4), chunk_size=int(1e4), projection='opu',
+                          framework='pytorch', dtype=torch.FloatTensor, cuda=False,
+                          lengthscale='auto', scale=1., degree=2., bias=0):
+    """
+    This function produces the desired random features for the input data (numpy matrix).
+    If cuda=True, single GPU support is activated.
+    Chunks are used to save GPU memory. This allows high-dimensional projections.
+
+    chunk_size determines the number of datapoints to be projected at once.
+    out_dim is the projection dimension.
+
+    lengthscale, scale, degree and bias are kernel parameters.
+    Only a subset needs to be adapted for the desired kernel.
+    """
+    
+    print('Computing large random projection...')
+    
     since = time.time()
     
     projection_module = projections['_'.join([projection, framework])]
     
     if projection == 'rbf':
-        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, log_lengthscale_init=log_lengthscale_init)
+        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, lengthscale=lengthscale, scale=scale)
     elif projection == 'opu':
-        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, exponent=exponent)
+        proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype, scale=scale, bias=bias, degree=degree)
     else:
         proj_mod = projection_module(data.shape[1], out_dim, dtype=dtype)
     
@@ -326,12 +348,10 @@ def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projectio
     for i in range(n_chunks):
         data_chunk = data[i*chunk_size:(i+1)*chunk_size]
         
-        if framework=='pytorch':
+        if framework == 'pytorch':
             data_chunk = torch.from_numpy(data_chunk).type(dtype)
             if cuda:
                 data_chunk = data_chunk.cuda()
-            
-        print('Processing chunk of size:', data_chunk.shape)
         
         if framework == 'pytorch':
             with torch.no_grad():
@@ -343,6 +363,7 @@ def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projectio
             output = proj_mod.forward(data_chunk)
 
         output_chunks.append(output)
+        print('Progress: {0:.2f}%'.format(i / n_chunks * 100))
         
     output_chunks = np.vstack(output_chunks)
         
@@ -351,3 +372,46 @@ def project_big_np_matrix(data, out_dim=int(1e4), chunk_size=int(1e4), projectio
     print('Time per chunk (seconds):', elapsed / n_chunks)
     
     return output_chunks, elapsed
+
+
+if __name__ == '__main__':
+    ## Some tests to check that the modules work correctly!
+    data = np.random.normal(size=(10000, 784))
+
+    def project(projection, framework, lengthscale='auto', scale=1., degree=2., bias=0, cuda=False):
+        if framework == 'pytorch':
+            dtype = torch.FloatTensor
+        else:
+            dtype = 'float32'
+
+        return project_np_data(data, out_dim=10000, chunk_size=1000, projection=projection,
+                                framework=framework, dtype=dtype, cuda=cuda,
+                                lengthscale=lengthscale, scale=scale, degree=degree, bias=bias)
+
+    # OPU Tests:
+    # opu_pytorch, _ = project('opu', 'pytorch', scale=np.sqrt(0.5), degree=4, bias=0, cuda=False)
+    # opu_numpy, _ = project('opu', 'numpy', scale=np.sqrt(0.5), degree=4, bias=0, cuda=False)
+
+    # from kernels import opu_kernel
+    # true_kernel = opu_kernel(data, var=0.5, bias=0, degree=4, gpu_ids=[])
+
+    # kernel_pytorch = opu_pytorch @ opu_pytorch.T
+    # kernel_numpy = opu_numpy @ opu_numpy.T
+
+    # print(np.mean(np.abs(kernel_pytorch - true_kernel) / true_kernel))
+    # print(np.mean(np.abs(kernel_numpy - true_kernel) / true_kernel))
+    
+    # RBF Tests:
+    rbf_pytorch, _ = project('rbf', 'pytorch', scale=np.sqrt(0.5), lengthscale='auto', cuda=False)
+    rbf_numpy, _ = project('rbf', 'numpy', scale=np.sqrt(0.5), lengthscale='auto', cuda=False)
+
+    from kernels import rbf_kernel
+    true_kernel = rbf_kernel(data, var=0.5, lengthscale='auto', gpu_ids=[])
+
+    kernel_pytorch = rbf_pytorch @ rbf_pytorch.T
+    kernel_numpy = rbf_numpy @ rbf_numpy.T
+
+    print(np.mean(np.abs(kernel_pytorch - true_kernel)))
+    print(np.mean(np.abs(kernel_numpy - true_kernel)))
+    
+    print('Done!')
