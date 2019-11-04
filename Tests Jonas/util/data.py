@@ -7,6 +7,8 @@ from sklearn.preprocessing import LabelBinarizer
 import torch
 from torch.utils.data import DataLoader, TensorDataset
 
+GPU_CONFIG_PATH = 'Tests Jonas/config/gpu.json'
+
 def check_file(path):
     if os.path.isfile(path):
         return True
@@ -21,10 +23,10 @@ def load_hyperparameters(config_path):
     
     return config
 
-def load_gpu_config(config_path):
-    check_file(config_path)
+def load_gpu_config():
+    check_file(GPU_CONFIG_PATH)
 
-    with open(config_path) as json_file:
+    with open(GPU_CONFIG_PATH) as json_file:
         gpu_params = json.load(json_file)
 
     return gpu_params

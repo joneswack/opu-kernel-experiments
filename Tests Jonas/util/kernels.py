@@ -8,10 +8,10 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from data import load_gpu_config, get_dataloader
+from .data import load_gpu_config, get_dataloader
 
 # load general GPU parameters
-gpu_params = load_gpu_config('Tests Jonas/config/gpu.json')
+gpu_params = load_gpu_config()
 gpu_ids = gpu_params['active_gpus']
 Y_MEMORY_LIMIT = gpu_params['memory_limit_gb']
 Y_CHUNK_SIZE = gpu_params['preferred_chunk_size_gb']

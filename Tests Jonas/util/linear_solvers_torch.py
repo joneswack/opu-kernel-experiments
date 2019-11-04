@@ -3,33 +3,55 @@ import torch
 import time
 
 # load general GPU parameters
-from data import load_gpu_config
-gpu_params = load_gpu_config('Tests Jonas/config/gpu.json')
+from .data import load_gpu_config
+gpu_params = load_gpu_config()
 gpu_ids = gpu_params['active_gpus']
+num_gpus = len(gpu_ids)
 
-"""
-Solve linear system using the conjugate gradient (CG) method.
-Params:
-    K - Covariance Matrix
-    Y - Target labels
-    init - Initial solution (if None, it is initialized to 0)
-    tol, atol - Termination criterion: norm(residual) <= max(tol*norm(y), atol)
-    max_iterations - maximum number of iterations the algorithm runs for
-        if no earlier termination has been achieved
-        
-Returns:
-    - The solution to the linear system
-    - A list with the iterations needed per output dimension
-        
-CAUTION:
-    The number of iterations required to converge depends highly on the conditioning of the linear system.
-    It makes sense to fit the kernel hyperparameter in a low-scale setting first.
-    The right choice of kernel scale and diagonal noise improves convergence significantly!
-"""
 
-def cg_multi_gpu(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
+def cholesky(K, Y):
+    """
+    Solve linear system using a cholesky solver.
+    Params:
+        K - Covariance Matrix
+        Y - Target Labels
+    """
+    K = torch.from_numpy(K)
+    Y = torch.from_numpy(Y)
+
+    if num_gpus > 0:
+        main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
+        K = K.to(main_gpu)
+        Y = Y.to(main_gpu)
+
+    with torch.no_grad():
+        L = torch.cholesky(K, upper=False)
+        solution = torch.cholesky_solve(Y, L, upper=False)
+
+    return solution.numpy()
+
+def cg(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
+    """
+    Solve linear system using the conjugate gradient (CG) method.
+    Params:
+        K - Covariance Matrix
+        Y - Target labels
+        init - Initial solution (if None, it is initialized to 0)
+        tol, atol - Termination criterion: norm(residual) <= max(tol*norm(y), atol)
+        max_iterations - maximum number of iterations the algorithm runs for
+            if no earlier termination has been achieved
+            
+    Returns:
+        - The solution to the linear system
+        - A list with the iterations needed per output dimension
+            
+    CAUTION:
+        The number of iterations required to converge depends highly on the conditioning of the linear system.
+        It makes sense to fit the kernel hyperparameters in a low-scale setting first.
+        The right choice of kernel scale and diagonal noise improves convergence significantly!
+    """
+
     N = np.shape(K)[0]
-    num_gpus = len(gpu_ids)
     if num_gpus > 0:
         main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
     

@@ -310,7 +310,7 @@ projections = {
 
     
 def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection='opu',
-                          framework='pytorch', dtype=torch.FloatTensor, cuda=False,
+                          framework='pytorch', cuda=False,
                           lengthscale='auto', scale=1., degree=2., bias=0):
     """
     This function produces the desired random features for the input data (numpy matrix).
@@ -325,6 +325,11 @@ def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection
     """
     
     print('Computing large random projection...')
+
+    if framework == 'pytorch':
+        dtype = torch.FloatTensor
+    else:
+        dtype = 'float32'
     
     since = time.time()
     
