@@ -1,0 +1,2 @@
+#!/bin/sh
+python3 "Tests Jonas/hyperparameter_optimizer.py" --dataset_config "Tests Jonas/config/datasets/fashion_mnist.json" --hyperparameter_config "Tests Jonas/config/hyperparameters/fashion_mnist_sim_orf.json"

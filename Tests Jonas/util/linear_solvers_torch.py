@@ -28,6 +28,9 @@ def cholesky(K, Y):
         L = torch.cholesky(K, upper=False)
         solution = torch.cholesky_solve(Y, L, upper=False)
 
+    if num_gpus > 0:
+        solution = solution.cpu()
+
     return solution.numpy()
 
 def cg(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):

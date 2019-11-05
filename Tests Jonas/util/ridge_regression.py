@@ -41,7 +41,8 @@ class RidgeRegression(object):
         if self.solver == 'cholesky_torch':
             return cholesky_torch(A, b)
         if self.solver == 'cg_torch':
-            return cg_torch(A, b, tol=self.tol, atol=self.atol, max_iterations=self.max_iterations)
+            solution, _, _ = cg_torch(A, b, tol=self.tol, atol=self.atol, max_iterations=self.max_iterations)
+            return solution
 
     def fit(self, X, y, alpha):
         if self.kernel is not None:

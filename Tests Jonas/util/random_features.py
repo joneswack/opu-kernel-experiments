@@ -4,6 +4,9 @@ import numpy as np
 import math
 import time
 
+from .data import load_gpu_config
+from .kernels import large_matrix_matrix_product
+
 class RandomProjectionModule(nn.Module):
     """
     This module is simply used to compute X @ W with W ~ N(mean, std).
@@ -65,8 +68,8 @@ class OPUModulePyTorch(nn.Module):
         self.dtype = dtype
         
     def forward(self, data):
-        data = data.type(self.dtype)
-        bias_vector = torch.ones(len(data), 1).type(self.dtype) * torch.exp(self.log_bias)
+        # bias_vector = torch.ones(len(data), 1) * torch.exp(self.log_bias)
+        bias_vector = torch.exp(self.log_bias).repeat(len(data)).view(-1, 1)
         data = torch.cat([data, bias_vector], dim=1)
 
         out_real = self.proj_real(data) ** 2
@@ -110,8 +113,10 @@ class OPUModuleNumpy(object):
         data = np.hstack([data, bias_vector])
         data = data.astype(self.dtype)
 
-        out_real = data.dot(self.real_matrix) ** 2
-        out_img = data.dot(self.img_matrix) ** 2
+        # out_real = data.dot(self.real_matrix) ** 2
+        # out_img = data.dot(self.img_matrix) ** 2
+        out_real = large_matrix_matrix_product(data, self.real_matrix, bias=0, p=2.)
+        out_img = large_matrix_matrix_product(data, self.img_matrix, bias=0, p=2.)
         
         output = (out_real + out_img) ** (self.degree // 2)
 
@@ -291,7 +296,8 @@ class RBFModuleNumpy(object):
 
         data = data / self.lengthscale
 
-        output = data @ self.projection_matrix
+        # output = data @ self.projection_matrix
+        output = large_matrix_matrix_product(data, self.projection_matrix, bias=0, p=1.)
         output += self.bias
         output = np.cos(output)
 
@@ -310,40 +316,54 @@ projections = {
 
     
 def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection='opu',
-                          framework='pytorch', cuda=False,
-                          lengthscale='auto', scale=1., degree=2., bias=0):
+                          framework='pytorch', lengthscale='auto', scale=1., degree=2., bias=0):
     """
     This function produces the desired random features for the input data (numpy matrix).
-    If cuda=True, single GPU support is activated.
-    Chunks are used to save GPU memory. This allows high-dimensional projections.
 
-    chunk_size determines the number of datapoints to be projected at once.
+    if framework == 'pytorch':
+        Chunks are used to save GPU memory. This allows high-dimensional projections.
+        chunk_size determines the number of datapoints to be projected at once.
+
+        This method should be preferred for small projections
+        (projection matrix can be stored in GPU memory)
+
+    Otherwise, use framework == 'numpy':
+        Projections happen in sub parts of the matrix
+
     out_dim is the projection dimension.
 
     lengthscale, scale, degree and bias are kernel parameters.
     Only a subset needs to be adapted for the desired kernel.
     """
     
-    print('Computing large random projection...')
-
-    if framework == 'pytorch':
-        dtype = torch.FloatTensor
-    else:
-        dtype = 'float32'
+    print('Computing random projection...')
     
     since = time.time()
     
     projection_module = projections['_'.join([projection, framework])]
     
     if projection == 'rbf':
-        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype, lengthscale=lengthscale, scale=scale)
+        proj_mod = projection_module(data.shape[1], num_features, lengthscale=lengthscale, scale=scale)
     elif projection == 'opu':
-        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype, scale=scale, bias=bias, degree=degree)
+        proj_mod = projection_module(data.shape[1], num_features, scale=scale, bias=bias, degree=degree)
     else:
-        proj_mod = projection_module(data.shape[1], num_features, dtype=dtype)
+        proj_mod = projection_module(data.shape[1], num_features)
     
-    if cuda and framework=='pytorch':
-        proj_mod = proj_mod.cuda()
+    if framework == 'numpy':
+        output = proj_mod.forward(data)
+        elapsed = time.time() - since
+        return output, elapsed
+
+
+
+    dtype = torch.FloatTensor
+
+    gpu_conf = load_gpu_config()
+    num_gpus = len(gpu_conf['active_gpus'])
+    if num_gpus > 0:
+        main_gpu = torch.device('cuda:' + str(gpu_conf['active_gpus'][0]))
+    if num_gpus > 0 and framework=='pytorch':
+        proj_mod = proj_mod.to(main_gpu)
     
     N = len(data)
     n_chunks = math.ceil(N / chunk_size)
@@ -355,12 +375,11 @@ def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection
         
         if framework == 'pytorch':
             data_chunk = torch.from_numpy(data_chunk).type(dtype)
-            if cuda:
-                data_chunk = data_chunk.cuda()
+            data_chunk = data_chunk.to(main_gpu)
         
         if framework == 'pytorch':
             with torch.no_grad():
-                if cuda:
+                if num_gpus > 0:
                     output = proj_mod.forward(data_chunk).cpu().numpy()
                 else:
                     output = proj_mod.forward(data_chunk).numpy()

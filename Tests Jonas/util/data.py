@@ -1,6 +1,8 @@
 import numpy as np
 import os
 import json
+import logging
+import pandas as pd
 
 from sklearn.preprocessing import LabelBinarizer
 
@@ -8,6 +10,39 @@ import torch
 from torch.utils.data import DataLoader, TensorDataset
 
 GPU_CONFIG_PATH = 'Tests Jonas/config/gpu.json'
+
+class DF_Handler(object):
+    def __init__(self, filename):
+        super(DF_Handler, self).__init__()
+
+        if not os.path.exists('csv'):
+            os.makedirs('csv')
+
+        self.filename = filename
+        self.df = pd.DataFrame()
+    
+    def append(self, entry_dict):
+        self.df = self.df.append(entry_dict, ignore_index=True)
+
+    def save(self):
+        self.df.to_csv(os.path.join('csv', self.filename + '.csv'), index=False)
+
+class Log_Handler(object):
+    def __init__(self, filename):
+        super(Log_Handler, self).__init__()
+
+        if not os.path.exists('logs'):
+            os.makedirs('logs')
+
+        self.logger = logging.getLogger()
+        logging.basicConfig(
+            level=logging.INFO, 
+            format='%(asctime)s [%(levelname)s] - %(message)s',
+            filename=os.path.join('logs', filename + '.log'))
+
+    def append(self, line):
+        print(line)
+        self.logger.info(line)
 
 def check_file(path):
     if os.path.isfile(path):
@@ -66,7 +101,7 @@ def load_dataset(config_path, binarize_data=True, dtype='float32'):
     train_labels = label_binarizer.fit_transform(train_labels).astype(dtype)
     test_labels = label_binarizer.fit_transform(test_labels).astype(dtype)
 
-    return train_data, test_data, train_labels, test_labels
+    return config['name'], train_data, test_data, train_labels, test_labels
 
 def get_torch_dataset(data, labels=None, dtype=torch.FloatTensor):
     if labels is not None:

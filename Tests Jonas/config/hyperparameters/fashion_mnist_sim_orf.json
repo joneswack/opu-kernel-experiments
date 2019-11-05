@@ -7,7 +7,7 @@
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "degree": 2,
-        "framework": "numpy",
+        "framework": "pytorch",
         "projection": "opu"
     },
     "sim_opu_4": {
@@ -18,7 +18,7 @@
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "degree": 4,
-        "framework": "numpy",
+        "framework": "pytorch",
         "projection": "opu"
     },
     "sim_opu_6": {
@@ -29,7 +29,7 @@
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "degree": 6,
-        "framework": "numpy",
+        "framework": "pytorch",
         "projection": "opu"
     }
 }
