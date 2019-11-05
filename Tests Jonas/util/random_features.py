@@ -4,7 +4,6 @@ import numpy as np
 import math
 import time
 
-from .data import load_gpu_config
 from .kernels import large_matrix_matrix_product
 
 class RandomProjectionModule(nn.Module):
@@ -306,31 +305,23 @@ class RBFModuleNumpy(object):
         return output
 
 
-projections = {
-    'opu_pytorch': OPUModulePyTorch,
-    'opu_numpy': OPUModuleNumpy,
+projection_modules = {
+    'opu': OPUModulePyTorch,
+    'opu_cpu': OPUModuleNumpy,
     'opu_physical': OPUModuleReal,
-    'rbf_pytorch': RBFModulePyTorch,
-    'rbf_numpy': RBFModuleNumpy
+    'rbf': RBFModulePyTorch,
+    'rbf_cpu': RBFModuleNumpy
 }
 
     
-def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection='opu',
-                          framework='pytorch', lengthscale='auto', scale=1., degree=2., bias=0):
+def project_np_data(data, device_config, num_features=int(1e4), projection='opu',
+                    lengthscale='auto', scale=1., degree=2., bias=0):
     """
     This function produces the desired random features for the input data (numpy matrix).
 
-    if framework == 'pytorch':
-        Chunks are used to save GPU memory. This allows high-dimensional projections.
-        chunk_size determines the number of datapoints to be projected at once.
+    device_config controls the use of GPUs and their memory.
 
-        This method should be preferred for small projections
-        (projection matrix can be stored in GPU memory)
-
-    Otherwise, use framework == 'numpy':
-        Projections happen in sub parts of the matrix
-
-    out_dim is the projection dimension.
+    num_features is the projection dimension.
 
     lengthscale, scale, degree and bias are kernel parameters.
     Only a subset needs to be adapted for the desired kernel.
@@ -340,7 +331,14 @@ def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection
     
     since = time.time()
     
-    projection_module = projections['_'.join([projection, framework])]
+    # Which projection module to load depends on 
+    module_name = projection
+    if device_config['use_cpu_memory']:
+        module_name += '_' + 'cpu'
+    try:
+        projection_module = projection_modules[module_name]
+    except KeyError:
+        raise RuntimeError("No {} module available!".format(module_name))
     
     if projection == 'rbf':
         proj_mod = projection_module(data.shape[1], num_features, lengthscale=lengthscale, scale=scale)
@@ -349,53 +347,71 @@ def project_np_data(data, num_features=int(1e4), chunk_size=int(1e4), projection
     else:
         proj_mod = projection_module(data.shape[1], num_features)
     
-    if framework == 'numpy':
+    if device_config['use_cpu_memory']:
+        # in this case we return a numpy matrix stored in normal memory
+        # the computation however, can take place on a GPU
         output = proj_mod.forward(data)
+        elapsed = time.time() - since
+        return output, elapsed
+    else:
+        # we keep data in GPU memory
+        if len(device_config['active_gpus'] == 0):
+            raise RuntimeError("You have to activate the flag use_cpu_memory in the config!")
+
+        main_gpu = torch.device('cuda:' + str(gpu_conf['active_gpus'][0]))
+        proj_mod = proj_mod.to(main_gpu)
+        
+        data = torch.from_numpy(data)
+        data = data.to(main_gpu)
+        
+        with torch.no_grad():
+            output = proj_mod.forward(data_chunk)
+
         elapsed = time.time() - since
         return output, elapsed
 
 
+    # Old Code:
+    # dtype = torch.FloatTensor
 
-    dtype = torch.FloatTensor
+    # gpu_conf = load_gpu_config()
+    # num_gpus = len(gpu_conf['active_gpus'])
+    # if num_gpus > 0:
+    #     main_gpu = torch.device('cuda:' + str(gpu_conf['active_gpus'][0]))
+    # if num_gpus > 0 and framework=='pytorch':
+    #     proj_mod = proj_mod.to(main_gpu)
+    
+    # N = len(data)
+    # n_chunks = math.ceil(N / chunk_size)
+    
+    # output_chunks = []
+    
+    # for i in range(n_chunks):
+    #     data_chunk = data[i*chunk_size:(i+1)*chunk_size]
+        
+    #     if framework == 'pytorch':
+    #         data_chunk = torch.from_numpy(data_chunk).type(dtype)
+    #         data_chunk = data_chunk.to(main_gpu)
+        
+    #     if framework == 'pytorch':
+    #         with torch.no_grad():
+    #             if num_gpus > 0:
+    #                 output = proj_mod.forward(data_chunk).cpu().numpy()
+    #             else:
+    #                 output = proj_mod.forward(data_chunk).numpy()
+    #     else:
+    #         output = proj_mod.forward(data_chunk)
 
-    gpu_conf = load_gpu_config()
-    num_gpus = len(gpu_conf['active_gpus'])
-    if num_gpus > 0:
-        main_gpu = torch.device('cuda:' + str(gpu_conf['active_gpus'][0]))
-    if num_gpus > 0 and framework=='pytorch':
-        proj_mod = proj_mod.to(main_gpu)
-    
-    N = len(data)
-    n_chunks = math.ceil(N / chunk_size)
-    
-    output_chunks = []
-    
-    for i in range(n_chunks):
-        data_chunk = data[i*chunk_size:(i+1)*chunk_size]
+    #     output_chunks.append(output)
+    #     print('Progress: {0:.2f}%'.format(i / n_chunks * 100))
         
-        if framework == 'pytorch':
-            data_chunk = torch.from_numpy(data_chunk).type(dtype)
-            data_chunk = data_chunk.to(main_gpu)
+    # output_chunks = np.vstack(output_chunks)
         
-        if framework == 'pytorch':
-            with torch.no_grad():
-                if num_gpus > 0:
-                    output = proj_mod.forward(data_chunk).cpu().numpy()
-                else:
-                    output = proj_mod.forward(data_chunk).numpy()
-        else:
-            output = proj_mod.forward(data_chunk)
-
-        output_chunks.append(output)
-        print('Progress: {0:.2f}%'.format(i / n_chunks * 100))
-        
-    output_chunks = np.vstack(output_chunks)
-        
-    elapsed = time.time() - since
-    print('Total time elapsed (seconds):', elapsed)
-    print('Time per chunk (seconds):', elapsed / n_chunks)
+    # elapsed = time.time() - since
+    # print('Total time elapsed (seconds):', elapsed)
+    # print('Time per chunk (seconds):', elapsed / n_chunks)
     
-    return output_chunks, elapsed
+    # return output_chunks, elapsed
 
 
 if __name__ == '__main__':
@@ -403,21 +419,20 @@ if __name__ == '__main__':
     data = np.random.normal(size=(10000, 784))
 
     def project(projection, framework, lengthscale='auto', scale=1., degree=2., bias=0, cuda=False):
-        if framework == 'pytorch':
-            dtype = torch.FloatTensor
+        if cuda:
+            device_config = {'use_cpu_memory': False, "active_gpus": [1]}
         else:
-            dtype = 'float32'
+            device_config = {'use_cpu_memory': True, "active_gpus": [1,2,3]}
 
-        return project_np_data(data, out_dim=10000, chunk_size=1000, projection=projection,
-                                framework=framework, dtype=dtype, cuda=cuda,
-                                lengthscale=lengthscale, scale=scale, degree=degree, bias=bias)
+        return project_np_data(data, device_config, num_features=int(1e4), projection=projection,
+                    lengthscale=lengthscale, scale=scale, degree=degree, bias=bias)
 
     # OPU Tests:
     # opu_pytorch, _ = project('opu', 'pytorch', scale=np.sqrt(0.5), degree=4, bias=0, cuda=False)
     # opu_numpy, _ = project('opu', 'numpy', scale=np.sqrt(0.5), degree=4, bias=0, cuda=False)
 
     # from kernels import opu_kernel
-    # true_kernel = opu_kernel(data, var=0.5, bias=0, degree=4, gpu_ids=[])
+    # true_kernel = opu_kernel(data, var=0.5, bias=0, degree=4)
 
     # kernel_pytorch = opu_pytorch @ opu_pytorch.T
     # kernel_numpy = opu_numpy @ opu_numpy.T
@@ -430,7 +445,7 @@ if __name__ == '__main__':
     rbf_numpy, _ = project('rbf', 'numpy', scale=np.sqrt(0.5), lengthscale='auto', cuda=False)
 
     from kernels import rbf_kernel
-    true_kernel = rbf_kernel(data, var=0.5, lengthscale='auto', gpu_ids=[])
+    true_kernel = rbf_kernel(data, var=0.5, lengthscale='auto')
 
     kernel_pytorch = rbf_pytorch @ rbf_pytorch.T
     kernel_numpy = rbf_numpy @ rbf_numpy.T

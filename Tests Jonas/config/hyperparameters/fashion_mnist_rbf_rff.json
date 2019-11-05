@@ -6,7 +6,6 @@
             "gamma_log2": {"min": -15, "max": -10, "step": 1},
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
-        "framework": "pytorch",
         "projection": "rbf"
     }
 }

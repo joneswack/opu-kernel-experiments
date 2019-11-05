@@ -1,0 +1,7 @@
+{
+    "active_gpus": [1],
+    "use_cpu_memory": true,
+    "memory_limit_gb": 12,
+    "preferred_chunk_size_gb": 6,
+    "matrix_prod_batch_size": 10000
+}

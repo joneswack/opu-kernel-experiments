@@ -2,27 +2,24 @@ import numpy as np
 import torch
 import time
 
-# load general GPU parameters
-from .data import load_gpu_config
-gpu_params = load_gpu_config()
-gpu_ids = gpu_params['active_gpus']
-num_gpus = len(gpu_ids)
 
-
-def cholesky(K, Y):
+def cholesky(K, Y, device_config):
     """
     Solve linear system using a cholesky solver.
     Params:
         K - Covariance Matrix
         Y - Target Labels
     """
-    K = torch.from_numpy(K)
-    Y = torch.from_numpy(Y)
 
-    if num_gpus > 0:
-        main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
-        K = K.to(main_gpu)
-        Y = Y.to(main_gpu)
+    if device_config['use_cpu_memory']:
+        # if cpu memory is used, we first need to move data to pytorch
+        K = torch.from_numpy(K)
+        Y = torch.from_numpy(Y)
+
+        if len(device_config['active_gpus']) > 0:
+            main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
+            K = K.to(main_gpu)
+            Y = Y.to(main_gpu)
 
     with torch.no_grad():
         L = torch.cholesky(K, upper=False)
@@ -33,7 +30,7 @@ def cholesky(K, Y):
 
     return solution.numpy()
 
-def cg(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
+def cg(K, Y, device_config, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
     """
     Solve linear system using the conjugate gradient (CG) method.
     Params:
@@ -54,21 +51,30 @@ def cg(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
         The right choice of kernel scale and diagonal noise improves convergence significantly!
     """
 
-    N = np.shape(K)[0]
+    N = K.shape[0]
+    num_gpus = len(device_config['active_gpus'])
+
     if num_gpus > 0:
-        main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
+        main_gpu = torch.device('cuda:' + str(device_config['active_gpus'][0]))
     
     if init is None:
         init = np.zeros(Y.shape)
-
-    X = init
-    R = Y - np.dot(K, X) # initialise residuals
 
     # torch.FloatTensor corresponds to 32 bits per number
     # torch.HalfTensor corresponds to 16 bits but looses too much precision
     # storing the MNIST kernel requires: 13.41 GB on the GPU @ 32 bits precision
     # => it needs to be split to allow for more space for further computations
-    K = torch.from_numpy(K).type(torch.FloatTensor)
+    if device_config['use_cpu_memory']:
+        # in case CPU memory is used, we need to convert numpy matrices to pytorch
+        K = torch.from_numpy(K).type(torch.FloatTensor)
+        Y = torch.from_numpy(Y).type(torch.FloatTensor)
+        X = torch.from_numpy(X).type(torch.FloatTensor)
+        init = torch.from_numpy(init).type(torch.FloatTensor)
+
+    X = init
+    R = Y - torch.matmul(K, X) # initialise residuals
+
+
     
     if num_gpus > 0:
         split_size = K.shape[0] // num_gpus
@@ -154,6 +160,6 @@ def cg(K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
         
         if num_gpus > 0:
             x = x.cpu()
-        solutions.append(x.numpy())
+        solutions.append(x)
 
-    return np.hstack(solutions), iterations, residual_norms
+    return torch.cat(solutions, dim=1), iterations, residual_norms
