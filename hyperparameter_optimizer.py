@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 
 import util.data
 from util.ridge_regression import RidgeRegression
-from util.random_features import project_np_data
+from util.random_features import project_data
 
 
 def generate_log_values(values, base=2):
@@ -69,7 +69,7 @@ def hyperparameter_iterator(cv_hyperparameters):
         for combo in itertools.product(*list(kernel_params.values())):
             yield {'alpha': alpha, 'kernel_params': dict(zip(kernel_params.keys(), combo))}
 
-def create_train_val_split(train_data, train_labels, train_size=0.8, numpy=True):
+def create_train_val_split(train_data, train_labels, train_size=0.8):
     """
     Splits the training data into training and validation data.
     train_size is the ratio of the training set.
@@ -81,17 +81,11 @@ def create_train_val_split(train_data, train_labels, train_size=0.8, numpy=True)
     perm = torch.randperm(len(train_data))
     train_idxs = perm[:train_size]
     val_idxs = perm[train_size:]
-
-    if numpy:
-        # train_idxs are tensors and need to be converted to numpy
-        X_train = train_data[train_idxs.numpy()]
-        X_val = train_data[val_idxs.numpy()]
-    else:
-        X_train = train_data[train_idxs]
-        X_val = train_data[val_idxs]
-
-    y_train = train_labels[train_idxs.numpy()]
-    y_val = train_labels[val_idxs.numpy()]
+    
+    X_train = train_data[train_idxs]
+    X_val = train_data[val_idxs]
+    y_train = train_labels[train_idxs]
+    y_val = train_labels[val_idxs]
 
     return X_train, X_val, y_train, y_val
 
@@ -104,14 +98,20 @@ def run_experiment(data, proj_params, alpha, device_config):
     train_data, test_data, train_labels, test_labels = data
 
     # depending on device_config, we receive either a GPU tensor or a np matrix
-    projection, projection_time = project_np_data(np.vstack([train_data, test_data]),
+    projection, projection_time = project_data(torch.cat([train_data, test_data], dim=0),
                                     device_config, **proj_params)
 
     # compute train_test split on training data to create validation set
     X_train, X_val, y_train, y_val = create_train_val_split(projection[:len(train_data)], train_labels)
 
+    if not device_config['use_cpu_memory']:
+        # we need to move the labels to GPU
+        y_train = y_train.to('cuda:' + str(device_config['active_gpus'][0]))
+        y_val = y_val.to('cuda:' + str(device_config['active_gpus'][0]))
+        test_labels = test_labels.to('cuda:' + str(device_config['active_gpus'][0]))
+
     since = time.time()
-    clf = RidgeRegression(solver='cholesky_torch', kernel=None)
+    clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
     clf.fit(X_train, y_train, alpha)
     regression_time = time.time() - since
 
@@ -148,7 +148,7 @@ if __name__ == '__main__':
 
     # iterate over all the kernel configs
     for kernel, params in hyperparameter_config.items():
-        log_name = '_'.join([data_name, kernel])
+        log_name = '_'.join([data[0], kernel])
         csv_handler = util.data.DF_Handler(log_name)
         log_handler = util.data.Log_Handler(log_name)
 
@@ -165,7 +165,7 @@ if __name__ == '__main__':
             alpha = cv_hyperparams['alpha']
 
             val_score, test_score, proj_time, regr_time = run_experiment(
-                data, proj_params, alpha, device_config)
+                data[1:], proj_params, alpha, device_config)
 
             log_dictionary = {**proj_params, **{
                 'alpha': alpha, 'val_score': val_score,

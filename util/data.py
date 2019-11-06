@@ -100,20 +100,23 @@ def load_dataset(config_path, binarize_data=True, dtype='float32'):
     train_labels = label_binarizer.fit_transform(train_labels).astype(dtype)
     test_labels = label_binarizer.fit_transform(test_labels).astype(dtype)
 
+    # Convert everything to PyTorch FloatTensors
+    train_data = torch.from_numpy(train_data).type(torch.FloatTensor)
+    test_data = torch.from_numpy(test_data).type(torch.FloatTensor)
+    train_labels = torch.from_numpy(train_labels).type(torch.FloatTensor)
+    test_labels = torch.from_numpy(test_labels).type(torch.FloatTensor)
+
     return config['name'], train_data, test_data, train_labels, test_labels
 
-def get_torch_dataset(data, labels=None, dtype=torch.FloatTensor):
+def get_torch_dataset(data, labels=None):
     if labels is not None:
-        return TensorDataset(
-            torch.from_numpy(data).type(dtype),
-            torch.from_numpy(labels).type(dtype)
-        )
+        return TensorDataset(data, labels)
     else:
-        return TensorDataset(torch.from_numpy(data).type(dtype))
+        return TensorDataset(data)
 
-def get_dataloader(data, labels=None, batchsize=3000, shuffle=True, dtype=torch.FloatTensor):
+def get_dataloader(data, labels=None, batchsize=3000, shuffle=True):
     return DataLoader(
-        get_torch_dataset(data, labels, dtype=dtype),
+        get_torch_dataset(data, labels),
         batch_size=batchsize,
         shuffle=shuffle,
         num_workers=0,

@@ -3,7 +3,7 @@ import torch
 import time
 
 
-def cholesky(K, Y, device_config):
+def cholesky(device_config, K, Y):
     """
     Solve linear system using a cholesky solver.
     Params:
@@ -11,26 +11,13 @@ def cholesky(K, Y, device_config):
         Y - Target Labels
     """
 
-    if device_config['use_cpu_memory']:
-        # if cpu memory is used, we first need to move data to pytorch
-        K = torch.from_numpy(K)
-        Y = torch.from_numpy(Y)
-
-        if len(device_config['active_gpus']) > 0:
-            main_gpu = torch.device('cuda:' + str(gpu_ids[0]))
-            K = K.to(main_gpu)
-            Y = Y.to(main_gpu)
-
     with torch.no_grad():
         L = torch.cholesky(K, upper=False)
         solution = torch.cholesky_solve(Y, L, upper=False)
 
-    if num_gpus > 0:
-        solution = solution.cpu()
+    return solution
 
-    return solution.numpy()
-
-def cg(K, Y, device_config, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
+def cg(device_config, K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000):
     """
     Solve linear system using the conjugate gradient (CG) method.
     Params:
@@ -53,28 +40,16 @@ def cg(K, Y, device_config, init=None, tol=1e-5, atol=1e-9, max_iterations=15000
 
     N = K.shape[0]
     num_gpus = len(device_config['active_gpus'])
+    gpu_ids = device_config['active_gpus']
 
     if num_gpus > 0:
         main_gpu = torch.device('cuda:' + str(device_config['active_gpus'][0]))
     
     if init is None:
-        init = np.zeros(Y.shape)
-
-    # torch.FloatTensor corresponds to 32 bits per number
-    # torch.HalfTensor corresponds to 16 bits but looses too much precision
-    # storing the MNIST kernel requires: 13.41 GB on the GPU @ 32 bits precision
-    # => it needs to be split to allow for more space for further computations
-    if device_config['use_cpu_memory']:
-        # in case CPU memory is used, we need to convert numpy matrices to pytorch
-        K = torch.from_numpy(K).type(torch.FloatTensor)
-        Y = torch.from_numpy(Y).type(torch.FloatTensor)
-        X = torch.from_numpy(X).type(torch.FloatTensor)
-        init = torch.from_numpy(init).type(torch.FloatTensor)
+        init = torch.zeros(Y.shape)
 
     X = init
     R = Y - torch.matmul(K, X) # initialise residuals
-
-
     
     if num_gpus > 0:
         split_size = K.shape[0] // num_gpus
@@ -108,10 +83,6 @@ def cg(K, Y, device_config, init=None, tol=1e-5, atol=1e-9, max_iterations=15000
         p = r
 
         t = 0
-
-        x = torch.from_numpy(x).type(torch.FloatTensor)
-        r = torch.from_numpy(r).type(torch.FloatTensor)
-        p = torch.from_numpy(p).type(torch.FloatTensor)
 
         if num_gpus > 0:
             # we copy p to every gpu unit
@@ -158,8 +129,8 @@ def cg(K, Y, device_config, init=None, tol=1e-5, atol=1e-9, max_iterations=15000
         print('Time elapsed: {}'.format(time.time() - since))
         iterations.append(t)
         
-        if num_gpus > 0:
-            x = x.cpu()
+        # if num_gpus > 0:
+        #     x = x.cpu()
         solutions.append(x)
 
     return torch.cat(solutions, dim=1), iterations, residual_norms
