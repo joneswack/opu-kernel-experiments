@@ -93,7 +93,12 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
 
     dataloader = get_dataloader(X, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
 
-    chunk_results = []
+    # If add_overwrite is given, we do not need to allocate new memory for the output!
+    if add_overwrite is not None:
+        output_tensor = add_overwrite
+    # Otherwise, we pre-allocate the memory in order to avoid unnecessary buffers.
+    else:
+        output_tensor = torch.zeros(X.size(0), Y.size(1)).type(torch.FloatTensor)
 
     print('Computing matrix-matrix product: {} x {}'.format(X.shape, Y.shape))
     since = time.time()
@@ -108,7 +113,6 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
             mat_mult.to(main_gpu)
             mat_mult = nn.DataParallel(mat_mult, device_ids=device_config['active_gpus'])
 
-        results = []
         for idx, batch in enumerate(dataloader):
             print('Progress: {0:.2f}%'.format(idx / len(dataloader) * 100))
             # There are no labels!
@@ -128,22 +132,15 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
                 # partial results are stored in cpu memory after being processed
                 xTy = xTy.to(cpu)
 
-            if add_overwrite is not None:
-                add_overwrite[
-                    idx*len(batch) : (idx+1)*len(batch),
-                    start_index : start_index + offset
-                ] = xTy
-            else:
-                results.append(xTy)
-
-        if add_overwrite is None:
-            results = torch.cat([result for result in results], dim=0, out=None)
-            chunk_results.append(results)
+            output_tensor[
+                idx*len(batch) : (idx+1)*len(batch),
+                start_index : start_index + offset
+            ] += xTy
 
     print('Elapsed: {0:.2f} seconds'.format(time.time() - since))
 
     if add_overwrite is None:
-        return torch.cat(chunk_results, dim=1)
+        return output_tensor
 
 
 def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
@@ -167,9 +164,8 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
 
     dataloader = get_dataloader(X, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
 
-    chunk_results = []
-
-    print('Computing pairwise distances...')
+    output_tensor = torch.zeros(X.size(0), Y.size(1)).type(torch.FloatTensor)
+    print('Computing pairwise distances of dimension: {} x {}'.format(X.shape, Y.shape))
     since = time.time()
 
     for start_index, offset in iterate_over_column_chunks(device_config, Y):
@@ -181,7 +177,6 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
             pd_module.to(main_gpu)
             pd_module = nn.DataParallel(pd_module, device_ids=device_config['active_gpus'])
 
-        results = []
         for idx, batch in enumerate(dataloader):
             print('Progress: {0:.2f}%'.format(idx / len(dataloader) * 100))
             # There are no labels!
@@ -192,14 +187,13 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
 
             d_x_y = pd_module(batch)
 
-            results.append(d_x_y)
-
-        results = torch.cat([result.to(cpu) if len(device_config['active_gpus']) > 0
-                                else result for result in results], dim=0, out=None)
-        chunk_results.append(results)
+            output_tensor[
+                idx*len(batch) : (idx+1)*len(batch),
+                start_index : start_index + offset
+            ] = d_x_y
 
     print('Elapsed: {0:.2f} seconds'.format(time.time() - since))
-    return torch.cat(chunk_results, dim=1)
+    return output_tensor
 
 
 def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
