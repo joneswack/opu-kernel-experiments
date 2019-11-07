@@ -81,8 +81,11 @@ class OPUModulePyTorch(nn.Module):
             output = self.proj_real(data) ** 2
             output += self.proj_im(data) ** 2
         
-        output = output ** (torch.exp(self.log_degree) // 2)
-        output = torch.exp(self.log_scale) * output
+        # in-place operations to decrease memory-usage.
+        output = output.pow_(torch.exp(self.log_degree) // 2)
+        # output = output ** (torch.exp(self.log_degree) // 2)
+        output = output.mul_(torch.exp(self.log_scale))
+        # output = torch.exp(self.log_scale) * output
         
         # we scale with the original scale factor (leads to kernel variance)
         return output

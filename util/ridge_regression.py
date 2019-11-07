@@ -52,25 +52,25 @@ class RidgeRegression(object):
     def fit(self, X, y, alpha):
         if self.kernel is not None:
             # For kernel ridge, we need to solve the dual form: beta = (X X' + alpha*I)^(-1) y
-            alpha_eye = alpha*torch.eye(len(X)).type(torch.FloatTensor)
-            if not self.device_config['use_cpu_memory']:
-                alpha_eye = alpha_eye.to('cuda:' + str(self.device_config['active_gpus'][0]))
-
             self.X_fit_ = X
             kernel = self.kernel(self.device_config, X, Y=None)
+
+            # add alpha to the diagonal without using additional memory
+            kernel.view(-1)[::len(kernel)+1] += alpha
+
             self.coef = self.solve(kernel + alpha_eye, y)
         else:
             # We solve the standard primal form: beta = (X' X + alpha*I)^(-1) X' y
-            alpha_eye = alpha*torch.eye(len(X.t())).type(torch.FloatTensor)
-
             if self.device_config['use_cpu_memory']:
                 xTx = large_matrix_matrix_product(self.device_config, X.t(), X, bias=0, p=1.)
             else:
-                alpha_eye = alpha_eye.to('cuda:' + str(self.device_config['active_gpus'][0]))
                 xTx = torch.matmul(X.t(), X)
+
+            # add alpha to the diagonal without using additional memory
+            xTx.view(-1)[::len(xTx)+1] += alpha
             
             xTy = torch.matmul(X.t(), y)
-            self.coef = self.solve(xTx + alpha_eye, xTy)
+            self.coef = self.solve(xTx, xTy)
 
     def predict(self, X):
         if self.kernel is not None:

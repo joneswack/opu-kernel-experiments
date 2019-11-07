@@ -11,6 +11,22 @@ import torch.nn.functional as F
 from .data import load_device_config, get_dataloader
 
 
+class EcoLinear(nn.Module):
+    """
+    This is a linear module that uses already existing weights to save memory.
+    """
+
+    def __init__(self, weights):
+        super(EcoLinear, self).__init__()
+        self.input_features = weights.shape[0]
+        self.output_features = weights.shape[1]
+
+        self.weight = nn.Parameter(weights, requires_grad=False)
+
+    def forward(self, input):
+        return torch.matmul(input, self.weight)
+
+
 class PairwiseDistances(nn.Module):
     """
     This class is a helper module used to compute pairwise squared euclidean distances with Y.
@@ -105,9 +121,7 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
 
     for start_index, offset in iterate_over_column_chunks(device_config, Y):
 
-        mat_mult = nn.Linear(in_features=Y.shape[0], out_features=offset, bias=False)
-        # The weights need to be transposed (PyTorch convention)
-        mat_mult.weight.data = Y[:, start_index : start_index + offset].t()
+        mat_mult = EcoLinear(Y[:, start_index : start_index + offset])
 
         if len(device_config['active_gpus']) > 0:
             mat_mult.to(main_gpu)
