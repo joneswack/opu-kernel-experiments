@@ -95,7 +95,7 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
 
     chunk_results = []
 
-    print('Computing matrix-matrix product...')
+    print('Computing matrix-matrix product: {} x {}'.format(X.shape, Y.shape))
     since = time.time()
 
     for start_index, offset in iterate_over_column_chunks(device_config, Y):
@@ -124,6 +124,10 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
             if p != 1:
                 xTy = xTy ** p
 
+            if len(device_config['active_gpus']) > 0:
+                # partial results are stored in cpu memory after being processed
+                xTy = xTy.to(cpu)
+
             if add_overwrite is not None:
                 add_overwrite[
                     idx*len(batch) : (idx+1)*len(batch),
@@ -133,8 +137,7 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
                 results.append(xTy)
 
         if add_overwrite is None:
-            results = torch.cat([result.to(cpu) if len(device_config['active_gpus']) > 0
-                                    else result for result in results], dim=0, out=None)
+            results = torch.cat([result for result in results], dim=0, out=None)
             chunk_results.append(results)
 
     print('Elapsed: {0:.2f} seconds'.format(time.time() - since))
