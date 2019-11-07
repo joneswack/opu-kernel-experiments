@@ -1,0 +1,2 @@
+#!/bin/sh
+python3 "kernel_evaluation.py" --dataset_config "config/datasets/fashion_mnist.json" --hyperparameter_config "config/hyperparameter_config/fashion_mnist_sim_orf.json" --device_config "config/devices/mult_gpu_low_mem.json"

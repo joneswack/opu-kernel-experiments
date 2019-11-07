@@ -1,0 +1,19 @@
+{
+    "sim_opu_2": {
+        "projection": "opu",
+        "alpha": 100,
+        "kernel_hyperparameters": {
+            "degree": 2,
+            "scale": 0.1,
+            "bias": 4
+        },
+        "cg_config": {
+            "tol": 1e-5,
+            "atol": 1e-9,
+            "max_iterations": 15000
+        },
+        "num_features": [
+            20000
+        ]
+    }
+}

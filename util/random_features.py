@@ -75,16 +75,17 @@ class OPUModulePyTorch(nn.Module):
 
         if self.device_config['use_cpu_memory']:
             # memory-saving version
-            out_real = large_matrix_matrix_product(self.device_config, data, self.proj_real.weight.t(), bias=0, p=2.)
-            out_img = large_matrix_matrix_product(self.device_config, data, self.proj_im.weight.t(), bias=0, p=2.)
+            output = large_matrix_matrix_product(self.device_config, data, self.proj_real.weight.t(), bias=0, p=2.)
+            large_matrix_matrix_product(self.device_config, data, self.proj_im.weight.t(), bias=0, p=2., add_overwrite=output)
         else:
-            out_real = self.proj_real(data) ** 2
-            out_img = self.proj_im(data) ** 2
+            output = self.proj_real(data) ** 2
+            output += self.proj_im(data) ** 2
         
-        output = (out_real + out_img) ** (torch.exp(self.log_degree) // 2)
+        output = output ** (torch.exp(self.log_degree) // 2)
+        output = torch.exp(self.log_scale) * output
         
         # we scale with the original scale factor (leads to kernel variance)
-        return torch.exp(self.log_scale) * output
+        return output
     
     
 class OPUModuleReal(object):
@@ -249,7 +250,7 @@ projection_modules = {
 
     
 def project_data(data, device_config, num_features=int(1e4), projection='opu',
-                    lengthscale='auto', scale=1., degree=2., bias=0):
+                    gamma='auto', scale=1., degree=2., bias=0):
     """
     This function produces the desired random features for the input data (pytorch tensors).
 
@@ -257,11 +258,17 @@ def project_data(data, device_config, num_features=int(1e4), projection='opu',
 
     num_features is the projection dimension.
 
-    lengthscale, scale, degree and bias are kernel parameters.
+    gamma, scale, degree and bias are kernel parameters.
     Only a subset needs to be adapted for the desired kernel.
     """
     
     print('Computing random projection...')
+
+    # convert gamma to lengthscale
+    if gamma == 'auto':
+        lengthscale = 'auto'
+    else:
+        lengthscale = np.sqrt(1./(2*gamma))
     
     since = time.time()
 

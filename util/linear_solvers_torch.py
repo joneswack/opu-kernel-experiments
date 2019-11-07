@@ -74,7 +74,6 @@ def cg(device_config, K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000
     # We have to solve one linear system (Kx=y) for every output dimension
     for dim in range(Y.shape[1]):
         print('Starting CG for dimension {}'.format(dim))
-        since = time.time()
         # get current residual vector
         r = R[:, dim][:, None]
         # get current solution
@@ -125,12 +124,13 @@ def cg(device_config, K, Y, init=None, tol=1e-5, atol=1e-9, max_iterations=15000
                 t = t + 1
 
         print('Iterations needed: {}'.format(t))
-        print('Residual norms: {}'.format(residual_norms))
-        print('Time elapsed: {}'.format(time.time() - since))
+        print('Residual norm: {}'.format(residual_norms[-1]))
         iterations.append(t)
-        
-        # if num_gpus > 0:
-        #     x = x.cpu()
         solutions.append(x)
 
-    return torch.cat(solutions, dim=1), iterations, residual_norms
+    solution = torch.cat(solutions, dim=1)
+
+    if device_config['use_cpu_memory']:
+        solution = solution.cpu()
+
+    return solution, iterations, residual_norms

@@ -11,11 +11,13 @@ from torch.utils.data import DataLoader, TensorDataset
 
 
 class DF_Handler(object):
-    def __init__(self, filename):
+    def __init__(self, folder, filename):
         super(DF_Handler, self).__init__()
 
-        if not os.path.exists('csv'):
-            os.makedirs('csv')
+        self.folder = os.path.join('csv', folder)
+
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
 
         self.filename = filename
         self.df = pd.DataFrame()
@@ -24,20 +26,22 @@ class DF_Handler(object):
         self.df = self.df.append(entry_dict, ignore_index=True)
 
     def save(self):
-        self.df.to_csv(os.path.join('csv', self.filename + '.csv'), index=False)
+        self.df.to_csv(os.path.join(self.folder, self.filename + '.csv'), index=False)
 
 class Log_Handler(object):
-    def __init__(self, filename):
+    def __init__(self, folder, filename):
         super(Log_Handler, self).__init__()
 
-        if not os.path.exists('logs'):
-            os.makedirs('logs')
+        self.folder = os.path.join('logs', folder)
+
+        if not os.path.exists(self.folder):
+            os.makedirs(self.folder)
 
         self.logger = logging.getLogger()
         logging.basicConfig(
             level=logging.INFO, 
             format='%(asctime)s [%(levelname)s] - %(message)s',
-            filename=os.path.join('logs', filename + '.log'))
+            filename=os.path.join(self.folder, filename + '.log'))
 
     def append(self, line):
         print(line)

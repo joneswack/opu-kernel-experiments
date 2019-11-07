@@ -1,0 +1,2 @@
+#!/bin/sh
+python3 "hyperparameter_optimizer.py" --dataset_config "config/datasets/fashion_mnist.json" --hyperparameter_search_config "config/hyperparameter_search/fashion_mnist_sim_orf.json" --device_config "config/devices/single_gpu.json"

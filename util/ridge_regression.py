@@ -64,7 +64,7 @@ class RidgeRegression(object):
             alpha_eye = alpha*torch.eye(len(X.t())).type(torch.FloatTensor)
 
             if self.device_config['use_cpu_memory']:
-                xTx = large_matrix_matrix_product(self.device_config, X.T, X, bias=0, p=1.)
+                xTx = large_matrix_matrix_product(self.device_config, X.t(), X, bias=0, p=1.)
             else:
                 alpha_eye = alpha_eye.to('cuda:' + str(self.device_config['active_gpus'][0]))
                 xTx = torch.matmul(X.t(), X)

@@ -66,7 +66,7 @@ def iterate_over_column_chunks(device_config, Y):
         yield (i*Y_column_chunk_size, output_dim)
 
 
-def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1.):
+def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite=None):
     """
     This function computes X @ Y in a memory-efficient way while making use of multiple GPUs.
     Y is split into chunks separated between columns. Only one chunk is kept in GPU memory at a time.
@@ -82,6 +82,9 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1.):
 
     For CPU computation, please define active_gpus=[] in the device_config.
     Otherwise, the GPU ids to be used should be passed in the list.
+
+    add_overwrite (default: None) allows to pass a matrix to which the results are added.
+    This allows to save memory in case the return value should be added to a matrix.
     """
 
     if len(device_config['active_gpus']) > 0:
@@ -121,14 +124,23 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1.):
             if p != 1:
                 xTy = xTy ** p
 
-            results.append(xTy)
+            if add_overwrite is not None:
+                add_overwrite[
+                    idx*len(batch) : (idx+1)*len(batch),
+                    start_index : start_index + offset
+                ] = xTy
+            else:
+                results.append(xTy)
 
-        results = torch.cat([result.to(cpu) if len(device_config['active_gpus']) > 0
-                                else result for result in results], dim=0, out=None)
-        chunk_results.append(results)
+        if add_overwrite is None:
+            results = torch.cat([result.to(cpu) if len(device_config['active_gpus']) > 0
+                                    else result for result in results], dim=0, out=None)
+            chunk_results.append(results)
 
     print('Elapsed: {0:.2f} seconds'.format(time.time() - since))
-    return torch.cat(chunk_results, dim=1)
+
+    if add_overwrite is None:
+        return torch.cat(chunk_results, dim=1)
 
 
 def large_pairwise_distances(device_config, X, Y, p=2., squared=True):

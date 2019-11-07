@@ -1,0 +1,11 @@
+{
+    "rbf_rff": {
+        "num_features": 10000,
+        "cv_hyperparameters": {
+            "scale_log10": {"min": -3, "max": 2, "step": 1},
+            "gamma_log2": {"min": -12, "max": -4, "step": 1},
+            "alpha_log10": [-6, -5, -4, -3, -2, -1, 0, 1, 2]
+        },
+        "projection": "rbf"
+    }
+}

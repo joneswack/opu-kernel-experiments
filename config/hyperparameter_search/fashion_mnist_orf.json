@@ -4,7 +4,7 @@
         "degree": 2,
         "cv_hyperparameters": {
             "scale_log10": {"min": -5, "max": 0, "step": 1},
-            "bias": [0, 1, 2, 4],
+            "bias": [0, 1, 2, 4, 8, 16],
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "num_features": 10000
@@ -14,7 +14,7 @@
         "degree": 4,
         "cv_hyperparameters": {
             "scale_log10": {"min": -5, "max": 0, "step": 1},
-            "bias": [0, 1, 2, 4],
+            "bias": [0, 1, 2, 4, 8, 16],
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "num_features": 10000
@@ -24,7 +24,7 @@
         "degree": 6,
         "cv_hyperparameters": {
             "scale_log10": {"min": -5, "max": 0, "step": 1},
-            "bias": [0, 1, 2, 4],
+            "bias": [0, 1, 2, 4, 8, 16],
             "alpha_log10": [-6, -1, 0, 1, 2, 3]
         },
         "num_features": 10000

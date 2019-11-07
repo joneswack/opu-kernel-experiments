@@ -25,7 +25,7 @@ def generate_log_values(values, base=2):
         max_value = values['max']
         step = values['step']
 
-        return [base**i for i in range(min_value, max_value, step)]
+        return [base**i for i in range(min_value, max_value+1, step)]
     else:
         # simply convert the existing list of values
         return [base**i for i in values]
@@ -111,8 +111,13 @@ def run_experiment(data, proj_params, alpha, device_config):
         test_labels = test_labels.to('cuda:' + str(device_config['active_gpus'][0]))
 
     since = time.time()
-    clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
-    clf.fit(X_train, y_train, alpha)
+    
+    try:
+        clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
+        clf.fit(X_train, y_train, alpha)
+    except RuntimeError:
+        return 0, 0, 0, 0
+
     regression_time = time.time() - since
 
     val_score = clf.score(X_val, y_val)
@@ -125,8 +130,8 @@ def parse_args():
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_config', type=str, required=True,
                         help='Path to dataset configuration file')
-    parser.add_argument('--hyperparameter_config', type=str, required=True,
-                        help='Path to hyperparameter configuration file')
+    parser.add_argument('--hyperparameter_search_config', type=str, required=True,
+                        help='Path to hyperparameter search configuration file')
     parser.add_argument('--device_config', type=str, required=True,
                         help='Path to device configuration file')
 
@@ -140,8 +145,8 @@ if __name__ == '__main__':
     print('Loading dataset: {}'.format(args.dataset_config))
     data = util.data.load_dataset(args.dataset_config, binarize_data=True)
 
-    print('Loading hyperparameters: {}'.format(args.hyperparameter_config))
-    hyperparameter_config = util.data.load_hyperparameters(args.hyperparameter_config)
+    print('Loading hyperparameters: {}'.format(args.hyperparameter_search_config))
+    hyperparameter_config = util.data.load_hyperparameters(args.hyperparameter_search_config)
 
     print('Loading device config: {}'.format(args.device_config))
     device_config = util.data.load_device_config(args.device_config)
@@ -149,8 +154,9 @@ if __name__ == '__main__':
     # iterate over all the kernel configs
     for kernel, params in hyperparameter_config.items():
         log_name = '_'.join([data[0], kernel])
-        csv_handler = util.data.DF_Handler(log_name)
-        log_handler = util.data.Log_Handler(log_name)
+        log_folder = 'hyperparameter_optimization'
+        csv_handler = util.data.DF_Handler(log_folder, log_name)
+        log_handler = util.data.Log_Handler(log_folder, log_name)
 
         log_handler.append('Running experiments for kernel {}'.format(kernel))
 
@@ -158,7 +164,10 @@ if __name__ == '__main__':
         other_hyperparams = {k:v for k,v in params.items() if k != 'cv_hyperparameters'}
 
         # iterate over all cv hyperparameters
-        for cv_hyperparams in hyperparameter_iterator(converted_cv_hyperparameters):
+        num_experiments = len(list(hyperparameter_iterator(converted_cv_hyperparameters)))
+        for idx, cv_hyperparams in enumerate(hyperparameter_iterator(converted_cv_hyperparameters)):
+            print('Progress: {} / {} ({:.2f}%)'.format(idx, num_experiments, 100*float(idx) / num_experiments))
+
             log_handler.append('Current configuration: {}'.format(cv_hyperparams))
 
             proj_params = {**cv_hyperparams['kernel_params'], **other_hyperparams}
