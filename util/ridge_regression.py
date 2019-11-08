@@ -58,7 +58,7 @@ class RidgeRegression(object):
             # add alpha to the diagonal without using additional memory
             kernel.view(-1)[::len(kernel)+1] += alpha
 
-            self.coef = self.solve(kernel + alpha_eye, y)
+            self.coef = self.solve(kernel, y)
         else:
             # We solve the standard primal form: beta = (X' X + alpha*I)^(-1) X' y
             if self.device_config['use_cpu_memory']:

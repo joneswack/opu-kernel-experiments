@@ -41,7 +41,7 @@ class PairwiseDistances(nn.Module):
     def forward(self, x):
         dists = torch.cdist(x, self.Y, p = self.p)
         if self.squared:
-            dists = dists**2
+            dists = dists.pow_(2)
         return dists
 
 
@@ -132,15 +132,12 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
             # There are no labels!
             batch = batch[0]
 
-            if len(device_config['active_gpus']) == 1:
-                batch = batch.to(main_gpu)
-
             xTy = mat_mult(batch)
 
             if bias != 0:
-                xTy += bias
+                xTy = xTy.add_(bias)
             if p != 1:
-                xTy = xTy ** p
+                xTy = xTy.pow_(p)
 
             if len(device_config['active_gpus']) > 0:
                 # partial results are stored in cpu memory after being processed
@@ -196,9 +193,6 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
             # There are no labels!
             batch = batch[0]
 
-            if len(device_config['active_gpus']) == 1:
-                batch = batch.to(main_gpu)
-
             d_x_y = pd_module(batch)
 
             output_tensor[
@@ -228,29 +222,44 @@ def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
     if Y is None:
         Y = X
 
-    kernel = 0
+    kernel = torch.zeros(X.size(0), Y.size(0)).type(torch.FloatTensor)
     s = int(degree // 2)
     s_fac_sq = math.factorial(s)**2
 
     if device_config['use_cpu_memory']:
-        xyT = large_matrix_matrix_product(device_config, X, Y.t(), bias=bias, p=2.)
+        xyT = large_matrix_matrix_product(device_config, X, Y.t(), bias=bias, p=1.)
     else:
-        xyT = torch.matmul(X, y.t())
+        xyT = torch.matmul(X, Y.t())
 
-    norm_x = X.norm(p='fro', dim=1, keepdim=True)
-    norm_y = Y.norm(p='fro', dim=1, keepdim=True)
-    norm_x_norm_y_T = torch.matmul(norm_x, norm_y.t())
+    # needs to become more memory-efficient!
+    norm_x = X.norm(p='fro', dim=1, keepdim=False)
+    norm_y = Y.norm(p='fro', dim=1, keepdim=False)
+    # norm_x_norm_y_T = torch.matmul(norm_x, norm_y.t())
 
     for i in range(s+1):
         # compute the sum shown in the paper
         coef = s_fac_sq * scipy.special.binom(s, i)**2
         if i > 0:
             # please note: we only take xTy**i because xTy**2 is computed beforehand
-            kernel += coef * (xyT ** i) * (norm_x_norm_y_T ** (2*(s-i)))
-        else:
-            kernel += coef * norm_x_norm_y_T**(2*s)
+            xyT = xyT.pow_(2) # computes xyT**(2*i)
+            kernel = kernel.add_(coef * xyT * torch.matmul(norm_x, norm_y.t()) ** (2*(s-i)))
+            # for i in range(len(kernel)):
+            #     for j in range(len(kernel)):
+            #         if i % 100 == 0 and j == 0:
+            #             print('Progress: {:.2f}%'.format(100 * (i / len(kernel))))
+            #         kernel[i,j].add_(coef * xyT[i, j] * (norm_x[i] * norm_y[j])**(2*(s-i)))
 
-    kernel *= var
+            # kernel += coef * (xyT ** (2*i)) * (norm_x_norm_y_T ** (2*(s-i)))
+        else:
+            # for i in range(len(kernel)):
+            #     for j in range(len(kernel)):
+            #         if i % 100 == 0 and j == 0:
+            #             print('Progress: {:.2f}%'.format(100 * (i / len(kernel))))
+            #         kernel[i,j].add_(coef * (norm_x[i] * norm_y[j])** (2*s))
+            kernel = kernel.add_(coef * torch.matmul(norm_x, norm_y.t()) ** (2*s))
+            # kernel += coef * norm_x_norm_y_T**(2*s)
+
+    kernel = kernel.mul_(var)
     
     return kernel
 
@@ -273,8 +282,10 @@ def polynomial_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
     if device_config['use_cpu_memory']:
         kernel = large_matrix_matrix_product(device_config, X, Y.t(), bias=bias, p=degree)
     else:
-        kernel = (torch.matmul(X, y.t()) + bias)**degree
-    kernel *= var
+        kernel = torch.matmul(X, y.t())
+        kernel.add_(bias)
+        kernel.pow_(degree)
+    kernel.mul_(var)
     
     return kernel
 

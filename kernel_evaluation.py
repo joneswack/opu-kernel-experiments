@@ -12,10 +12,10 @@ from sklearn.model_selection import train_test_split
 import util.data
 from util.ridge_regression import RidgeRegression
 from util.random_features import project_data
-from util.kernels import polynomial_kernel
+from util.kernels import opu_kernel, rbf_kernel, polynomial_kernel
 
 
-def run_experiment(data, proj_params, alpha, cg_config, device_config):
+def run_experiment(data, projection, kernel_params, alpha, cg_config, device_config):
     """
     Runs a regression for a single hyperparameter combination.
     Returns validation/test scores and projection/regression timings.
@@ -23,9 +23,16 @@ def run_experiment(data, proj_params, alpha, cg_config, device_config):
 
     train_data, test_data, train_labels, test_labels = data
 
-    # depending on device_config, we receive either a GPU tensor or a np matrix
-    projection, projection_time = project_data(torch.cat([train_data, test_data], dim=0),
-                                    device_config, **proj_params)
+    kernels = {
+        'opu': opu_kernel,
+        'rbf': rbf_kernel,
+        'poly': polynomial_kernel
+    }
+
+    try:
+        kernel = kernels[projection]
+    except KeyError:
+        raise RuntimeError("Kernel {} not available.".format(projection))
 
     if not device_config['use_cpu_memory']:
         # we need to move the labels to GPU
@@ -35,26 +42,20 @@ def run_experiment(data, proj_params, alpha, cg_config, device_config):
     since = time.time()
 
     try:
-        if proj_params['num_features'] > 10000:
-            if proj_params['num_features'] > len(train_labels):
-                # in this case we prefer to invert the n x n matrix instead of the D x D one.
-                # linear kernel <=> polynomial with degree 1.
-                kernel = lambda x, y: polynomial_kernel(device_config, x, y, var=1., bias=0, degree=1.)
-            else:
-                kernel = None
-            clf = RidgeRegression(device_config, solver='cg_torch', kernel=kernel, **cg_config)
-            clf.fit(projection[:len(train_data)], train_labels, alpha)
-        else:
-            clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
-            clf.fit(projection[:len(train_data)], train_labels, alpha)
+        # in this case we prefer to invert the n x n matrix instead of the D x D one.
+        # linear kernel <=> polynomial with degree 1.
+        kernel_function = lambda device_config, X, Y: kernel(device_config, X, Y, **kernel_params)
+
+        clf = RidgeRegression(device_config, solver='cg_torch', kernel=kernel_function, **cg_config)
+        clf.fit(train_data, train_labels, alpha)
     except RuntimeError:
-        return 0, 0, 0
+        return 0, 0
 
     regression_time = time.time() - since
 
-    test_score = clf.score(projection[len(train_data):], test_labels)
+    test_score = clf.score(test_data, test_labels)
     
-    return test_score, projection_time, regression_time
+    return test_score, regression_time
     
 
 def parse_args():
@@ -91,27 +92,23 @@ if __name__ == '__main__':
 
         log_handler.append('Running experiments for kernel {}'.format(kernel))
 
-        # iterate over all cv hyperparameters
-        num_experiments = len(params['num_features'])
-        for idx, feature_dim in enumerate(params['num_features']):
-            print('Progress: {} / {} ({:.2f}%)'.format(idx, num_experiments, 100*float(idx) / num_experiments))
+        projection = params['projection']
+        alpha = params['alpha']
+        kernel_params = params['kernel_hyperparameters']
+        cg_config = params['cg_config']
 
-            log_handler.append('Feature Dimension: {}'.format(feature_dim))
+        # we need to convert the scale parameter to variance
+        kernel_params['var'] = kernel_params.pop('scale') ** 2
 
-            alpha = params['alpha']
-            kernel_params = params['kernel_hyperparameters']
-            cg_config = params['cg_config']
-            proj_params = {**kernel_params, **{'num_features': feature_dim}}
+        test_score, regr_time = run_experiment(
+            data[1:], projection, kernel_params, alpha, cg_config, device_config)
 
-            test_score, proj_time, regr_time = run_experiment(
-                data[1:], proj_params, alpha, cg_config, device_config)
-
-            log_dictionary = {**proj_params, **{
-                'alpha': alpha, 'test_score': test_score,
-                'proj_time': proj_time, 'regr_time': regr_time
-            }}
-            csv_handler.append(log_dictionary)
-            csv_handler.save()
-            log_handler.append('Result: {}'.format(log_dictionary))
+        log_dictionary = {**kernel_params, **{
+            'projection': projection, 'alpha': alpha,
+            'test_score': test_score, 'regr_time': regr_time
+        }}
+        csv_handler.append(log_dictionary)
+        csv_handler.save()
+        log_handler.append('Result: {}'.format(log_dictionary))
 
     log_handler.append('Experiments completed!')

@@ -13,7 +13,7 @@
             "max_iterations": 15000
         },
         "num_features": [
-            20000
+            100000
         ]
     }
 }
