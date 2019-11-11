@@ -1,19 +1,19 @@
 {
-    "sim_opu_2": {
+    "sim_opu_6_20k_plus": {
         "projection": "opu",
-        "alpha": 10000,
+        "alpha": 10,
         "kernel_hyperparameters": {
-            "degree": 2,
-            "scale": 1,
-            "bias": 4
+            "degree": 6,
+            "scale": 1e-9,
+            "bias": 64
         },
         "cg_config": {
             "tol": 1e-5,
             "atol": 1e-9,
-            "max_iterations": 15000
+            "max_iterations": 180000
         },
         "num_features": [
-            100000
+            20000, 50000, 100000
         ]
     }
 }

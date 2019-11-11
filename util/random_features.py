@@ -266,12 +266,6 @@ def project_data(data, device_config, num_features=int(1e4), projection='opu',
     """
     
     print('Computing random projection...')
-
-    # convert gamma to lengthscale
-    if gamma == 'auto':
-        lengthscale = 'auto'
-    else:
-        lengthscale = np.sqrt(1./(2*gamma))
     
     since = time.time()
 

@@ -232,9 +232,9 @@ def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
         xyT = torch.matmul(X, Y.t())
 
     # needs to become more memory-efficient!
-    norm_x = X.norm(p='fro', dim=1, keepdim=False)
-    norm_y = Y.norm(p='fro', dim=1, keepdim=False)
-    # norm_x_norm_y_T = torch.matmul(norm_x, norm_y.t())
+    norm_x = X.norm(p='fro', dim=1, keepdim=True)
+    norm_y = Y.norm(p='fro', dim=1, keepdim=True)
+    norm_x_norm_y_T = torch.matmul(norm_x, norm_y.t())
 
     for i in range(s+1):
         # compute the sum shown in the paper
@@ -242,7 +242,7 @@ def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
         if i > 0:
             # please note: we only take xTy**i because xTy**2 is computed beforehand
             xyT = xyT.pow_(2) # computes xyT**(2*i)
-            kernel = kernel.add_(coef * xyT * torch.matmul(norm_x, norm_y.t()) ** (2*(s-i)))
+            kernel = kernel.add_(coef * xyT * norm_x_norm_y_T ** (2*(s-i)))
             # for i in range(len(kernel)):
             #     for j in range(len(kernel)):
             #         if i % 100 == 0 and j == 0:
@@ -256,7 +256,7 @@ def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
             #         if i % 100 == 0 and j == 0:
             #             print('Progress: {:.2f}%'.format(100 * (i / len(kernel))))
             #         kernel[i,j].add_(coef * (norm_x[i] * norm_y[j])** (2*s))
-            kernel = kernel.add_(coef * torch.matmul(norm_x, norm_y.t()) ** (2*s))
+            kernel = kernel.add_(coef * norm_x_norm_y_T ** (2*s))
             # kernel += coef * norm_x_norm_y_T**(2*s)
 
     kernel = kernel.mul_(var)
@@ -315,7 +315,7 @@ def rbf_kernel(device_config, X, Y=None, var=1., lengthscale='auto'):
         kernel = PairwiseDistances(Y, p=2., squared=True).forward(X)
 
     kernel /= (2 * lengthscale**2)
-    kernel = var * np.exp(-kernel)
+    kernel = var * torch.exp(-kernel)
 
     return kernel
 

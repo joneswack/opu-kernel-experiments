@@ -99,6 +99,15 @@ if __name__ == '__main__':
 
         # we need to convert the scale parameter to variance
         kernel_params['var'] = kernel_params.pop('scale') ** 2
+        # also the bias is squared since it appears in xTy
+        if 'bias' in kernel_params.keys():
+            kernel_params['bias'] = kernel_params['bias'] ** 2
+        # the lengthscale is sqrt(1 / 2*gamma)
+        if 'gamma' in kernel_params.keys():
+            if kernel_params['gamma'] == 'auto':
+                kernel_params['lengthscale'] = kernel_params.pop('gamma')
+            else:
+                kernel_params['lengthscale'] = np.sqrt(1. / (2*kernel_params.pop('gamma')))
 
         test_score, regr_time = run_experiment(
             data[1:], projection, kernel_params, alpha, cg_config, device_config)

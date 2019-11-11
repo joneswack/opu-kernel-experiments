@@ -103,6 +103,13 @@ if __name__ == '__main__':
             cg_config = params['cg_config']
             proj_params = {**kernel_params, **{'projection': params['projection'], 'num_features': feature_dim}}
 
+            # the lengthscale is sqrt(1 / 2*gamma)
+            if 'gamma' in proj_params.keys():
+                if proj_params['gamma'] == 'auto':
+                    proj_params['lengthscale'] = proj_params.pop('gamma')
+                else:
+                    proj_params['lengthscale'] = np.sqrt(1. / (2*proj_params.pop('gamma')))
+
             test_score, proj_time, regr_time = run_experiment(
                 data[1:], proj_params, alpha, cg_config, device_config)
 
