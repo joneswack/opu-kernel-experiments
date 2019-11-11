@@ -7,9 +7,9 @@
             "scale": 0.01
         },
         "cg_config": {
-            "tol": 1e-5,
+            "tol": 1e-6,
             "atol": 1e-9,
-            "max_iterations": 15000
+            "max_iterations": 180000
         },
         "num_features": [
             10, 20, 30, 40, 50, 60, 70, 80, 90, 100,

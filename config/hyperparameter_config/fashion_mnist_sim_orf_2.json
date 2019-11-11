@@ -8,12 +8,12 @@
             "bias": 4
         },
         "cg_config": {
-            "tol": 1e-5,
+            "tol": 1e-6,
             "atol": 1e-9,
             "max_iterations": 180000
         },
         "num_features": [
-            20000, 50000, 100000
+            50000, 100000
         ]
     }
 }

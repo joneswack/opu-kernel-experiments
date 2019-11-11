@@ -1,2 +1,2 @@
 alpha,bias,degree,projection,regr_time,test_score,var
-10000.0,16.0,2.0,opu,1142.6733167171478,0.8863,1.0
+0.1,64.0,6.0,opu,0.0,0.0,1e-12

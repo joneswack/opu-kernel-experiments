@@ -47,7 +47,8 @@ def run_experiment(data, proj_params, alpha, cg_config, device_config):
         else:
             clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
             clf.fit(projection[:len(train_data)], train_labels, alpha)
-    except RuntimeError:
+    except RuntimeError as e:
+        print(e)
         return 0, 0, 0
 
     regression_time = time.time() - since
