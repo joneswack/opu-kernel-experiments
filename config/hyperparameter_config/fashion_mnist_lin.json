@@ -1,9 +1,9 @@
 {
     "linear": {
         "projection": "linear",
-        "alpha": 0.000001,
+        "alpha": 100,
         "kernel_hyperparameters": {
-            "bias": 16,
+            "bias": 8,
             "scale": 1
         },
         "cg_config": {
