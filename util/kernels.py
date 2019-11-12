@@ -195,6 +195,10 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
 
             d_x_y = pd_module(batch)
 
+            if len(device_config['active_gpus']) > 0:
+                # partial results are stored in cpu memory after being processed
+                d_x_y = d_x_y.to(cpu)
+
             output_tensor[
                 idx*len(batch) : (idx+1)*len(batch),
                 start_index : start_index + offset
