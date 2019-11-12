@@ -105,6 +105,7 @@ def run_experiment(data, proj_params, alpha, device_config):
         if not device_config['use_cpu_memory']:
             # we just copy the projection to GPU
             projection = projection.to('cuda:{}'.format(device_config['active_gpus'][0]))
+            projection_time = 0
     else:
         # depending on device_config, we receive either a GPU tensor or a np matrix
         projection, projection_time = project_data(torch.cat([train_data, test_data], dim=0),

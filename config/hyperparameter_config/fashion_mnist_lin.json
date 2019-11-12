@@ -1,0 +1,20 @@
+{
+    "linear": {
+        "projection": "linear",
+        "alpha": 1.0,
+        "kernel_hyperparameters": {
+            "bias": 16,
+            "scale": 1
+        },
+        "cg_config": {
+            "tol": 1e-6,
+            "atol": 1e-9,
+            "max_iterations": 180000
+        },
+        "num_features": [
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+            200, 300, 400, 500, 600, 700, 800, 900, 1000,
+            2000, 3000, 4000, 5000, 10000, 20000, 50000, 100000
+        ]
+    }
+}
