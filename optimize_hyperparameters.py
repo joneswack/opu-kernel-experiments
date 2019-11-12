@@ -100,6 +100,7 @@ def run_experiment(data, proj_params, alpha, device_config):
     if proj_params['projection'] == 'linear':
         # for the linear case, we do not project any data
         projection = torch.cat([train_data, test_data], dim=0)
+        projection = torch.cat([projection, torch.ones(len(projection), 1) * proj_params['bias']], dim=1)
         projection = projection.mul_(proj_params['scale'])
 
         if not device_config['use_cpu_memory']:

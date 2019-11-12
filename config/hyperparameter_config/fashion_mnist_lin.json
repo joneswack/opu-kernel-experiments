@@ -1,7 +1,7 @@
 {
     "linear": {
         "projection": "linear",
-        "alpha": 1.0,
+        "alpha": 0.000001,
         "kernel_hyperparameters": {
             "bias": 16,
             "scale": 1
