@@ -1,0 +1,11 @@
+{
+    "linear": {
+        "projection": "linear",
+        "cv_hyperparameters": {
+            "scale_log10": {"min": -5, "max": 0, "step": 1},
+            "bias": [0, 1, 2, 4, 8, 16],
+            "alpha_log10": [-6, -1, 0, 1, 2, 3, 4]
+        },
+        "num_features": 10000
+    }
+}

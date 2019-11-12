@@ -175,14 +175,15 @@ def large_pairwise_distances(device_config, X, Y, p=2., squared=True):
 
     dataloader = get_dataloader(X, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
 
-    output_tensor = torch.zeros(X.size(0), Y.size(1)).type(torch.FloatTensor)
+    output_tensor = torch.zeros(X.size(0), Y.size(0)).type(torch.FloatTensor)
     print('Computing pairwise distances of dimension: {} x {}'.format(X.shape, Y.shape))
     since = time.time()
 
-    for start_index, offset in iterate_over_column_chunks(device_config, Y):
+    # here we need to split Y by rows (column chunks of Y.t())
+    for start_index, offset in iterate_over_column_chunks(device_config, Y.t()):
 
         # The weights need to be transposed (PyTorch convention)
-        pd_module = PairwiseDistances(Y[:, start_index : start_index + offset], p=p, squared=squared)
+        pd_module = PairwiseDistances(Y[start_index : start_index + offset], p=p, squared=squared)
 
         if len(device_config['active_gpus']) > 0:
             pd_module.to(main_gpu)

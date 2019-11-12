@@ -97,8 +97,17 @@ def run_experiment(data, proj_params, alpha, device_config):
 
     train_data, test_data, train_labels, test_labels = data
 
-    # depending on device_config, we receive either a GPU tensor or a np matrix
-    projection, projection_time = project_data(torch.cat([train_data, test_data], dim=0),
+    if proj_params['projection'] == 'linear':
+        # for the linear case, we do not project any data
+        projection = torch.cat([train_data, test_data], dim=0)
+        projection = projection.mul_(proj_params['scale'])
+
+        if not device_config['use_cpu_memory']:
+            # we just copy the projection to GPU
+            projection = projection.to('cuda:{}'.format(device_config['active_gpus'][0]))
+    else:
+        # depending on device_config, we receive either a GPU tensor or a np matrix
+        projection, projection_time = project_data(torch.cat([train_data, test_data], dim=0),
                                     device_config, **proj_params)
 
     # compute train_test split on training data to create validation set
@@ -115,7 +124,8 @@ def run_experiment(data, proj_params, alpha, device_config):
     try:
         clf = RidgeRegression(device_config, solver='cholesky_torch', kernel=None)
         clf.fit(X_train, y_train, alpha)
-    except RuntimeError:
+    except RuntimeError as e:
+        print(e)
         return 0, 0, 0, 0
 
     regression_time = time.time() - since

@@ -29,6 +29,10 @@ def run_experiment(data, projection, kernel_params, alpha, cg_config, device_con
         'poly': polynomial_kernel
     }
 
+    if projection == 'linear':
+        kernel = kernels['poly']
+        kernel_params['degree'] = 1
+
     try:
         kernel = kernels[projection]
     except KeyError:

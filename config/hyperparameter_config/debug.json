@@ -1,16 +1,15 @@
 {
-    "sim_opu_2": {
-        "projection": "opu",
-        "alpha": 10000,
+    "rbf": {
+        "projection": "rbf",
+        "alpha": 0.001,
         "kernel_hyperparameters": {
-            "degree": 2,
-            "scale": 1,
-            "bias": 4
+            "gamma": 0.003906,
+            "scale": 0.1
         },
         "cg_config": {
-            "tol": 1e-5,
+            "tol": 1e-6,
             "atol": 1e-9,
-            "max_iterations": 15000
+            "max_iterations": 180000
         },
         "num_features": [
             100000
