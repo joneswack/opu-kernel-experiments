@@ -243,21 +243,8 @@ def opu_kernel(device_config, X, Y=None, var=1., bias=0, degree=2.):
             # please note: we only take xTy**i because xTy**2 is computed beforehand
             xyT = xyT.pow_(2) # computes xyT**(2*i)
             kernel = kernel.add_(coef * xyT * norm_x_norm_y_T ** (2*(s-i)))
-            # for i in range(len(kernel)):
-            #     for j in range(len(kernel)):
-            #         if i % 100 == 0 and j == 0:
-            #             print('Progress: {:.2f}%'.format(100 * (i / len(kernel))))
-            #         kernel[i,j].add_(coef * xyT[i, j] * (norm_x[i] * norm_y[j])**(2*(s-i)))
-
-            # kernel += coef * (xyT ** (2*i)) * (norm_x_norm_y_T ** (2*(s-i)))
         else:
-            # for i in range(len(kernel)):
-            #     for j in range(len(kernel)):
-            #         if i % 100 == 0 and j == 0:
-            #             print('Progress: {:.2f}%'.format(100 * (i / len(kernel))))
-            #         kernel[i,j].add_(coef * (norm_x[i] * norm_y[j])** (2*s))
             kernel = kernel.add_(coef * norm_x_norm_y_T ** (2*s))
-            # kernel += coef * norm_x_norm_y_T**(2*s)
 
     kernel = kernel.mul_(var)
     
@@ -314,8 +301,9 @@ def rbf_kernel(device_config, X, Y=None, var=1., lengthscale='auto'):
     else:
         kernel = PairwiseDistances(Y, p=2., squared=True).forward(X)
 
-    kernel /= (2 * lengthscale**2)
-    kernel = var * torch.exp(-kernel)
+    kernel = kernel.div_(2 * lengthscale**2)
+    kernel = torch.exp(-kernel, out=kernel)
+    kernel = kernel.mul_(var)
 
     return kernel
 

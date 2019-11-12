@@ -75,7 +75,7 @@ def load_device_config(config_path):
 
     return device_params
 
-def load_dataset(config_path, binarize_data=True, dtype='float32'):
+def load_dataset(config_path, binarize_data=True, transform=None, dtype='float32'):
     check_file(config_path)
 
     with open(config_path) as json_file:
@@ -94,6 +94,10 @@ def load_dataset(config_path, binarize_data=True, dtype='float32'):
     # Flatten the images
     train_data = train_data.reshape(len(train_data), -1)
     test_data = test_data.reshape(len(test_data), -1)
+
+    if transform is not None:
+        train_data = transform(train_data)
+        test_data = transform(test_data)
 
     # Binarize the images
     if binarize_data:

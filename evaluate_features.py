@@ -104,6 +104,12 @@ if __name__ == '__main__':
             cg_config = params['cg_config']
             proj_params = {**kernel_params, **{'projection': params['projection'], 'num_features': feature_dim}}
 
+            if 'precomputed_features' in params:
+                # we can use precomputed OPU features
+                precomputed = np.load(params['precomputed_features'])
+                proj_params['precomputed'] = precomputed
+                proj_params['raw_features'] = False
+
             # the lengthscale is sqrt(1 / 2*gamma)
             if 'gamma' in proj_params.keys():
                 if proj_params['gamma'] == 'auto':
