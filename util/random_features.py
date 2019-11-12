@@ -101,6 +101,9 @@ class OPUModuleReal(object):
     However, it needs to be integer-valued for the OPU!
     degree is the degree after the modulous operation, default: 2 (m in the paper).
     exposure_us is the exposure time of the camera in micro-seconds.
+    
+    If raw_features is set to False, the scale of the OPU features is corrected.
+    Precomputed features can be passed through precomputed to correct scaling afterwards.
 
     The optical random features are VERY tricky!
     The features are normalized to account for the default variance given by the physical setup.
@@ -114,7 +117,8 @@ class OPUModuleReal(object):
     The input for the OPU needs to be in binary format!
     """
 
-    def __init__(self, input_features, output_features, scale=1., bias=0, degree=2., exposure_us=400):
+    def __init__(self, input_features, output_features, scale=1., bias=0, degree=2.,
+                        exposure_us=400, raw_features=False, precomputed=None):
         # One way to seed would be to move the camera ROI
         # self.random_mapping.opu.device.cam_ROI = ([x_offset, y_offset], [width, height])
         # However, it is easier to oversample from the output space and subsample afterwards
@@ -124,6 +128,9 @@ class OPUModuleReal(object):
         self.scale = scale / np.sqrt(output_features)
         self.bias = bias
         self.degree = degree
+
+        self.raw_features = raw_features
+        self.precomputed = precomputed
 
     def estimate_opu_variance(self, data, projection):
         """
@@ -144,22 +151,31 @@ class OPUModuleReal(object):
         return np.mean(projection / (2*data_norm**2))
 
     def forward(self, data):
-        # The opu needs data to be in numpy uint8 binary format!
-        data = data.numpy().astype('uint8')
 
-        # append bias to the data
-        bias_vector = np.ones((len(data), self.bias)).astype('uint8')
-        data = np.hstack([data, bias_vector])
+        if self.precomputed is None:
+            # The opu needs data to be in numpy uint8 binary format!
+            data = data.numpy().astype('uint8')
 
-        # this part communicates with the physical device
-        from lightonml.projections.sklearn import OPUMap
-        from lightonopu.opu import OPU
-        
-        with OPU(n_components=self.output_features) as opu_dev:
-            random_mapping = OPUMap(opu=opu_dev, n_components=self.output_features, ndims=1)
-            random_mapping.opu.device.exposure_us = self.eposure_us
-            random_mapping.opu.device.frametime_us = self.eposure_us+100
-            output = random_mapping.transform(data).astype('float32')
+            # append bias to the data
+            # for the real OPU, the bias is represented by an array of ones
+            # unlike for the simulated OPU, the value already needs to be squared
+            bias_vector = np.ones((len(data), self.bias**2)).astype('uint8')
+            data = np.hstack([data, bias_vector])
+
+            # this part communicates with the physical device
+            from lightonml.projections.sklearn import OPUMap
+            from lightonopu.opu import OPU
+            
+            with OPU(n_components=self.output_features) as opu_dev:
+                random_mapping = OPUMap(opu=opu_dev, n_components=self.output_features, ndims=1)
+                random_mapping.opu.device.exposure_us = self.eposure_us
+                random_mapping.opu.device.frametime_us = self.eposure_us+100
+                output = random_mapping.transform(data).astype('float32')
+        else:
+            output = self.precomputed.astype('float32')
+
+        if self.raw_features:
+            return output
 
         # Now we have to be careful:
         # The OPU has an unknown variance defined by physical settings
@@ -253,7 +269,7 @@ projection_modules = {
 
     
 def project_data(data, device_config, num_features=int(1e4), projection='opu',
-                    gamma='auto', scale=1., degree=2., bias=0):
+                    lengthscale='auto', scale=1., degree=2., bias=0, raw_features=False, precomputed=None):
     """
     This function produces the desired random features for the input data (pytorch tensors).
 
@@ -263,6 +279,8 @@ def project_data(data, device_config, num_features=int(1e4), projection='opu',
 
     gamma, scale, degree and bias are kernel parameters.
     Only a subset needs to be adapted for the desired kernel.
+
+    raw_features and precomputed are parameters for the physical OPU.
     """
     
     print('Computing random projection...')
@@ -278,6 +296,9 @@ def project_data(data, device_config, num_features=int(1e4), projection='opu',
         proj_mod = projection_module(device_config, data.shape[1], num_features, lengthscale=lengthscale, scale=scale)
     elif projection == 'opu':
         proj_mod = projection_module(device_config, data.shape[1], num_features, scale=scale, bias=bias, degree=degree)
+    elif projection == 'opu_physical':
+        proj_mod = projection_module(data.shape[1], num_features, scale=scale, bias=bias, degree=degree,
+                                        raw_features=raw_features, precomputed=precomputed)
     else:
         proj_mod = projection_module(data.shape[1], num_features)
 

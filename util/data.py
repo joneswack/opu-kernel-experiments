@@ -53,6 +53,12 @@ def check_file(path):
     else:
         raise RuntimeError('File not found: {}'.format(path))
 
+def save_numpy(data, folder, filename):
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+
+    np.save(os.path.join(folder, filename + '.npy'), data)
+
 def load_hyperparameters(config_path):
     check_file(config_path)
 

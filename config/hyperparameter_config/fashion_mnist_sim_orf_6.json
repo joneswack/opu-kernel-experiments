@@ -1,10 +1,10 @@
 {
-    "sim_opu_6_20k_plus": {
+    "sim_opu_6": {
         "projection": "opu",
-        "alpha": 10,
+        "alpha": 1,
         "kernel_hyperparameters": {
             "degree": 6,
-            "scale": 1e-9,
+            "scale": 1e-6,
             "bias": 64
         },
         "cg_config": {
