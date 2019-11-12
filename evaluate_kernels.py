@@ -32,11 +32,11 @@ def run_experiment(data, projection, kernel_params, alpha, cg_config, device_con
     if projection == 'linear':
         kernel = kernels['poly']
         kernel_params['degree'] = 1
-
-    try:
-        kernel = kernels[projection]
-    except KeyError:
-        raise RuntimeError("Kernel {} not available.".format(projection))
+    else:
+        try:
+            kernel = kernels[projection]
+        except KeyError:
+            raise RuntimeError("Kernel {} not available.".format(projection))
 
     if not device_config['use_cpu_memory']:
         # we need to move the labels to GPU
