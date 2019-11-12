@@ -62,7 +62,7 @@ if __name__ == '__main__':
         kernel_params = params['kernel_hyperparameters']
         proj_params = {**kernel_params, **{'projection': 'opu_physical', 'num_features': 100000, 'raw_features': True}}
 
-        projection = compute_opu_features(data, proj_params, device_config)
+        projection = compute_opu_features(data[1:], proj_params, device_config)
 
         util.data.save_numpy(projection.astype('uint8'), 'opu_features', log_name)
 
