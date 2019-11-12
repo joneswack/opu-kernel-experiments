@@ -35,8 +35,6 @@ def parse_args():
                         help='Path to dataset configuration file')
     parser.add_argument('--hyperparameter_config', type=str, required=True,
                         help='Path to hyperparameter configuration file')
-    parser.add_argument('--device_config', type=str, required=True,
-                        help='Path to device configuration file')
 
     args = parser.parse_args()
 
