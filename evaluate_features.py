@@ -92,6 +92,10 @@ if __name__ == '__main__':
 
         log_handler.append('Running experiments for kernel {}'.format(kernel))
 
+        if 'precomputed_features' in params:
+            # we can use precomputed OPU features
+            precomputed = np.load(params['precomputed_features'])
+
         # iterate over all cv hyperparameters
         num_experiments = len(params['num_features'])
         for idx, feature_dim in enumerate(params['num_features']):
@@ -106,8 +110,7 @@ if __name__ == '__main__':
 
             if 'precomputed_features' in params:
                 # we can use precomputed OPU features
-                precomputed = np.load(params['precomputed_features'])
-                proj_params['precomputed'] = precomputed
+                proj_params['precomputed'] = precomputed[:, feature_dim]
                 proj_params['raw_features'] = False
 
             # the lengthscale is sqrt(1 / 2*gamma)
