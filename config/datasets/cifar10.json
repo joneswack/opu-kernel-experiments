@@ -1,7 +1,7 @@
 {
     "name": "cifar10",
-    "train_data": "../../datasets/export/cifar10/numpy/train_data_cifar10.npy",
-    "test_data": "../../datasets/export/cifar10/numpy/test_data_cifar10.npy",
-    "train_labels": "../../datasets/export/cifar10/numpy/train_targets_cifar10.npy",
-    "test_labels": "../../datasets/export/cifar10/numpy/test_targets_cifar10.npy"
+    "train_data": "../datasets/export/cifar10/numpy/train_data_cifar10.npy",
+    "test_data": "../datasets/export/cifar10/numpy/test_data_cifar10.npy",
+    "train_labels": "../datasets/export/cifar10/numpy/train_targets_cifar10.npy",
+    "test_labels": "../datasets/export/cifar10/numpy/test_targets_cifar10.npy"
 }

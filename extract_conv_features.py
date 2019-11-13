@@ -1,5 +1,4 @@
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 import argparse
 
@@ -7,18 +6,18 @@ import util.data
 
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 import torchvision
 import torchvision.models as models
-import torchvision.transforms as transforms
 
 import util.data
 
 import os
 
 models = [
-    {'name':'vgg16_bn', 'model':models.vgg16_bn, 'layers':[13, 23, 33, 43]},
-    # {'name':'resnet34', 'model':models.resnet34, 'layers':[1, 2, 3]},
-    # {'name':'alexnet', 'model':models.alexnet, 'layers':[2, 5]}
+    {'name':'vgg16_bn', 'model':models.vgg16_bn, 'layers':[13, 23, 33, 43, 'final_conv']},
+    {'name':'resnet34', 'model':models.resnet34, 'layers':[1, 2, 3, 'final_conv']},
+    {'name':'alexnet', 'model':models.alexnet, 'layers':[2, 5, 'final_conv']}
 ]
 
 class Identity(nn.Module):
@@ -28,15 +27,20 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
-use_cuda = torch.cuda.is_available()
+def resize2d(img, size):
+    return F.adaptive_avg_pool2d(img, size)
 
 def compute_features(device_config, loader, model, layer_number, avgpool=False):
-    
+    """
+    We use conv feature extracted from ImageNet.
+    """
     model = model['model'](pretrained=True)
     model.eval()
     conv_features = []
-    labels = []
-    for i, (images) in enumerate(loader):
+
+    for i, images in enumerate(loader):
+        images = images[0]
+        
         if (i*images.shape[0]) % 1000 == 0:
             print('Processed {} images.'.format(i*images.shape[0]))
         
@@ -45,10 +49,21 @@ def compute_features(device_config, loader, model, layer_number, avgpool=False):
             images = images.to('cuda:{}'.format(device_config['active_gpus'][0]))
 
         with torch.no_grad():
+
+            # 2D upsampling in case of the last conv layer
+            if layer_number == 'final_conv':
+                # images = resize2d(images, (224,224))
+                # print(images)
+                # print(images.dtype)
+                images = F.interpolate(images, size=224)
+
             if isinstance(model, torchvision.models.resnet.ResNet):
                 # in the case of ResNet we only remove the last layer (FC)
                 model.fc = Identity()
                 model.avgpool = Identity()
+
+                if layer_number == 'final_conv':
+                    layer_number = 4
                 
                 if layer_number < 4:
                     model.layer4 = Identity()
@@ -61,7 +76,10 @@ def compute_features(device_config, loader, model, layer_number, avgpool=False):
             
             else:
                 # in the case of AlexNet and VGG we can choose to keep avg pooling
-                outputs = model.features[:(layer_number+1)](images)
+                if layer_number != 'final_conv':
+                    outputs = model.features[:(layer_number+1)](images)
+                else:
+                    outputs = model.features(images)
                 if avgpool:
                     outputs = model.avgpool(outputs)
             
@@ -99,14 +117,14 @@ if __name__ == '__main__':
     args = parse_args()
 
     print('Loading dataset: {}'.format(args.dataset_config))
-    data = util.data.load_dataset(args.dataset_config, binarize_data=False, transform=imagenet_norm)
+    data = util.data.load_dataset(args.dataset_config, binarize_data=False, flatten=False, transform=imagenet_norm)
     data_name, train_data, test_data, train_labels, test_labels = data
-
-    train_loader = util.data.get_dataloader(train_data, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
-    test_loader = util.data.get_dataloader(test_data, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
 
     print('Loading device config: {}'.format(args.device_config))
     device_config = util.data.load_device_config(args.device_config)
+
+    train_loader = util.data.get_dataloader(train_data, labels=None, batchsize=100, shuffle=False)
+    test_loader = util.data.get_dataloader(test_data, labels=None, batchsize=100, shuffle=False)
         
     for model in models:
         for layer in model['layers']:
@@ -119,21 +137,21 @@ if __name__ == '__main__':
             out_file = os.path.join(args.output_dir, data_name, model['name'] + '_' + str(layer))
             label_file = os.path.join(args.output_dir, data_name, 'labels')
 
-            np.save(out_file + '_train.npz', train_conv_features)
-            np.save(out_file + '_test.npz', test_conv_features)
+            np.save(out_file + '_train', train_conv_features)
+            np.save(out_file + '_test', test_conv_features)
 
-            np.save(label_file + '_train.npz', train_labels)
-            np.save(label_file + '_test.npz', test_labels)
+            np.save(label_file + '_train', train_labels)
+            np.save(label_file + '_test', test_labels)
 
             print('Saved features to: {}'.format(args.output_dir))
 
-#             if not isinstance(model['model'], torchvision.models.resnet.ResNet):
-#                 print('Computing avgpool features...')
+            # if not isinstance(model['model'], torchvision.models.resnet.ResNet):
+            #     print('Computing avgpool features...')
 
-#                 train_conv_features, train_labels = compute_features(trainloader, model, avgpool=True)
-#                 test_conv_features, test_labels = compute_features(testloader, model, avgpool=True)
-#                 np.savez_compressed(out_file + '_avgpool.npz', train=train_conv_features, test=test_conv_features)
+            #     train_conv_features, train_labels = compute_features(trainloader, model, avgpool=True)
+            #     test_conv_features, test_labels = compute_features(testloader, model, avgpool=True)
+            #     np.savez_compressed(out_file + '_avgpool.npz', train=train_conv_features, test=test_conv_features)
 
-#                 print('Saved features to: {}'.format(out_file + '_avgpool.npz'))
+            #     print('Saved features to: {}'.format(out_file + '_avgpool.npz'))
                 
     print('Done!')
