@@ -110,7 +110,7 @@ if __name__ == '__main__':
 
             if 'precomputed_features' in params:
                 # we can use precomputed OPU features
-                proj_params['precomputed'] = precomputed[:, feature_dim]
+                proj_params['precomputed'] = precomputed[:, :feature_dim]
                 proj_params['raw_features'] = False
 
             # the lengthscale is sqrt(1 / 2*gamma)
@@ -127,6 +127,10 @@ if __name__ == '__main__':
                 'alpha': alpha, 'test_score': test_score,
                 'proj_time': proj_time, 'regr_time': regr_time
             }}
+
+            if 'precomputed' in log_dictionary and log_dictionary['precomputed'] is not None:
+                log_dictionary['precomputed'] = True
+
             csv_handler.append(log_dictionary)
             csv_handler.save()
             log_handler.append('Result: {}'.format(log_dictionary))

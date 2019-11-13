@@ -173,7 +173,11 @@ if __name__ == '__main__':
         log_handler.append('Running experiments for kernel {}'.format(kernel))
 
         converted_cv_hyperparameters = convert_cv_hyperparameters_dict(params['cv_hyperparameters'])
-        other_hyperparams = {k:v for k,v in params.items() if k != 'cv_hyperparameters'}
+        other_hyperparams = {k:v for k,v in params.items() if k != 'cv_hyperparameters' and k != 'precomputed_features'}
+
+        if 'precomputed_features' in params:
+            # we can use precomputed OPU features
+            precomputed = np.load(params['precomputed_features'])
 
         # iterate over all cv hyperparameters
         num_experiments = len(list(hyperparameter_iterator(converted_cv_hyperparameters)))
@@ -185,6 +189,11 @@ if __name__ == '__main__':
             proj_params = {**cv_hyperparams['kernel_params'], **other_hyperparams}
             alpha = cv_hyperparams['alpha']
 
+            if 'precomputed_features' in params:
+                # we can use precomputed OPU features
+                proj_params['precomputed'] = precomputed[:, :10000]
+                proj_params['raw_features'] = False
+
             val_score, test_score, proj_time, regr_time = run_experiment(
                 data[1:], proj_params, alpha, device_config)
 
@@ -193,6 +202,10 @@ if __name__ == '__main__':
                 'test_score': test_score, 'proj_time': proj_time,
                 'regr_time': regr_time
             }}
+
+            if 'precomputed' in log_dictionary and log_dictionary['precomputed'] is not None:
+                log_dictionary['precomputed'] = True
+
             csv_handler.append(log_dictionary)
             csv_handler.save()
             log_handler.append('Result: {}'.format(log_dictionary))

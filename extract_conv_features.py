@@ -1,6 +1,9 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import time
+import argparse
+
+import util.data
 
 import torch
 import torch.nn as nn
@@ -11,19 +14,11 @@ import torchvision.transforms as transforms
 import util.data
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"]="3"
-
-feature_dir = 'conv_features'
 
 models = [
     {'name':'vgg16_bn', 'model':models.vgg16_bn, 'layers':[13, 23, 33, 43]},
     # {'name':'resnet34', 'model':models.resnet34, 'layers':[1, 2, 3]},
     # {'name':'alexnet', 'model':models.alexnet, 'layers':[2, 5]}
-]
-
-datasets = [
-    # {'name':'stl10', 'dataset':torchvision.datasets.STL10},
-    {'name':'cifar10', 'dataset':torchvision.datasets.CIFAR10}
 ]
 
 class Identity(nn.Module):
@@ -33,50 +28,21 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
-def get_data_loaders(dataset):
-    transform = transforms.Compose(
-        [# transforms.Resize(224),
-         transforms.ToTensor(),
-         transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
-         # cifar10
-         # transforms.Normalize((0.4914, 0.4822, 0.4465), (0.247, 0.243, 0.261))])
-
-    if dataset['name'] == 'stl10':
-        trainset = dataset['dataset'](root='data/' + dataset['name'], split='train',
-                                                    download=True, transform=transform)
-        testset = dataset['dataset'](root='data/' + dataset['name'], split='test',
-                                                   download=True, transform=transform)
-    else:
-        trainset = dataset['dataset'](root='data/' + dataset['name'], train=True,
-                                                    download=True, transform=transform)
-        testset = dataset['dataset'](root='data/' + dataset['name'], train=False,
-                                                   download=True, transform=transform)
-
-    trainloader = torch.utils.data.DataLoader(trainset, batch_size=100,
-                                              shuffle=False, num_workers=0)
-    testloader = torch.utils.data.DataLoader(testset, batch_size=100,
-                                             shuffle=False, num_workers=0)
-
-    classes = ('plane', 'car', 'bird', 'cat',
-               'deer', 'dog', 'frog', 'horse', 'ship', 'truck')
-    
-    return trainloader, testloader
-
 use_cuda = torch.cuda.is_available()
 
-def compute_features(loader, model, layer_number, avgpool=False):
+def compute_features(device_config, loader, model, layer_number, avgpool=False):
     
     model = model['model'](pretrained=True)
     model.eval()
     conv_features = []
     labels = []
-    for i, (images, targets) in enumerate(loader):
+    for i, (images) in enumerate(loader):
         if (i*images.shape[0]) % 1000 == 0:
             print('Processed {} images.'.format(i*images.shape[0]))
         
-        if use_cuda:
-            model = model.cuda()
-            images = images.cuda()
+        if not device_config['use_cpu_memory']:
+            model = model.to('cuda:{}'.format(device_config['active_gpus'][0]))
+            images = images.to('cuda:{}'.format(device_config['active_gpus'][0]))
 
         with torch.no_grad():
             if isinstance(model, torchvision.models.resnet.ResNet):
@@ -101,12 +67,14 @@ def compute_features(loader, model, layer_number, avgpool=False):
             
                 
         conv_features.append(outputs.data.cpu().view(images.size(0), -1).numpy())
-        labels.append(targets.numpy())
-    return np.concatenate(conv_features), np.concatenate(labels)
+    return np.concatenate(conv_features)
 
 
-def imagenet_norm(data, means, stds):
+def imagenet_norm(data):
     data = data.astype('float32')
+
+    means = [0.485, 0.456, 0.406]
+    stds = [0.229, 0.224, 0.225]
 
     for i, (mean, std) in enumerate(zip(means, stds)):
         # data has shape (n, channels, dims)
@@ -120,6 +88,8 @@ def parse_args():
                         help='Path to dataset configuration file')
     parser.add_argument('--device_config', type=str, required=True,
                         help='Path to device configuration file')
+    parser.add_argument('--output_dir', type=str, required=True,
+                        help='Path to the output directory for the conv features')
 
     args = parser.parse_args()
 
@@ -130,38 +100,40 @@ if __name__ == '__main__':
 
     print('Loading dataset: {}'.format(args.dataset_config))
     data = util.data.load_dataset(args.dataset_config, binarize_data=False, transform=imagenet_norm)
+    data_name, train_data, test_data, train_labels, test_labels = data
+
+    train_loader = util.data.get_dataloader(train_data, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
+    test_loader = util.data.get_dataloader(test_data, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
 
     print('Loading device config: {}'.format(args.device_config))
     device_config = util.data.load_device_config(args.device_config)
-
-    for dataset in datasets:
-        print('Computing features for dataset: {}'.format(dataset['name']))
         
-        for model in models:
-            for layer in model['layers']:
-                print('Current model: {}'.format(model['name']))
-                print('Current layer: {}'.format(layer))
+    for model in models:
+        for layer in model['layers']:
+            print('Current model: {}'.format(model['name']))
+            print('Current layer: {}'.format(layer))
 
-                trainloader, testloader = get_data_loaders(dataset)
+            train_conv_features = compute_features(device_config, train_loader, model, layer, avgpool=False)
+            test_conv_features = compute_features(device_config, test_loader, model, layer, avgpool=False)
 
-                train_conv_features, train_labels = compute_features(trainloader, model, layer, avgpool=False)
-                test_conv_features, test_labels = compute_features(testloader, model, layer, avgpool=False)
+            out_file = os.path.join(args.output_dir, data_name, model['name'] + '_' + str(layer))
+            label_file = os.path.join(args.output_dir, data_name, 'labels')
 
-                out_file = os.path.join(feature_dir, dataset['name'], model['name'] + '_' + str(layer))
-                label_file = os.path.join(feature_dir, dataset['name'], 'labels.npz')
+            np.save(out_file + '_train.npz', train_conv_features)
+            np.save(out_file + '_test.npz', test_conv_features)
 
-                np.savez_compressed(out_file + '.npz', train=train_conv_features, test=test_conv_features)
-                np.savez_compressed(label_file, train=train_labels, test=test_labels)
+            np.save(label_file + '_train.npz', train_labels)
+            np.save(label_file + '_test.npz', test_labels)
 
-                print('Saved features to: {}'.format(out_file + '.npz'))
+            print('Saved features to: {}'.format(args.output_dir))
 
-    #             if not isinstance(model['model'], torchvision.models.resnet.ResNet):
-    #                 print('Computing avgpool features...')
+#             if not isinstance(model['model'], torchvision.models.resnet.ResNet):
+#                 print('Computing avgpool features...')
 
-    #                 train_conv_features, train_labels = compute_features(trainloader, model, avgpool=True)
-    #                 test_conv_features, test_labels = compute_features(testloader, model, avgpool=True)
-    #                 np.savez_compressed(out_file + '_avgpool.npz', train=train_conv_features, test=test_conv_features)
+#                 train_conv_features, train_labels = compute_features(trainloader, model, avgpool=True)
+#                 test_conv_features, test_labels = compute_features(testloader, model, avgpool=True)
+#                 np.savez_compressed(out_file + '_avgpool.npz', train=train_conv_features, test=test_conv_features)
 
-    #                 print('Saved features to: {}'.format(out_file + '_avgpool.npz'))
+#                 print('Saved features to: {}'.format(out_file + '_avgpool.npz'))
                 
     print('Done!')
