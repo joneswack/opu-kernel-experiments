@@ -27,12 +27,9 @@ class Identity(nn.Module):
     def forward(self, x):
         return x
 
-def resize2d(img, size):
-    return F.adaptive_avg_pool2d(img, size)
-
 def compute_features(device_config, loader, model, layer_number, avgpool=False):
     """
-    We use conv feature extracted from ImageNet.
+    We use conv features extracted from ImageNet.
     """
     model = model['model'](pretrained=True)
     model.eval()
@@ -52,18 +49,17 @@ def compute_features(device_config, loader, model, layer_number, avgpool=False):
 
             # 2D upsampling in case of the last conv layer
             if layer_number == 'final_conv':
-                # images = resize2d(images, (224,224))
-                # print(images)
-                # print(images.dtype)
+                # it may make sense to choose an upsampling mode here!
                 images = F.interpolate(images, size=224)
 
             if isinstance(model, torchvision.models.resnet.ResNet):
                 # in the case of ResNet we only remove the last layer (FC)
                 model.fc = Identity()
-                model.avgpool = Identity()
 
                 if layer_number == 'final_conv':
                     layer_number = 4
+                else:
+                    model.avgpool = Identity()
                 
                 if layer_number < 4:
                     model.layer4 = Identity()
