@@ -1,7 +1,0 @@
-{
-    "kernel": "opu",
-    "degree": 1,
-    "dimension": 10000,
-    "scale": 1e-3,
-    "framework": "pytorch"
-}

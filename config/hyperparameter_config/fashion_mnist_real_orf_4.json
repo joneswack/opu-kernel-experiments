@@ -1,10 +1,10 @@
 {
-    "real_opu_2": {
+    "real_opu_4": {
         "projection": "opu_physical",
-        "alpha": 20000,
+        "alpha": 100,
         "kernel_hyperparameters": {
-            "degree": 2,
-            "scale": 1,
+            "degree": 4,
+            "scale": 1e-4,
             "bias": 0
         },
         "cg_config": {
