@@ -1,7 +1,25 @@
-# opu-kernel-experiments
-Experiments related to the ICASSP submission
+# Kernel computations from large-scale random features obtained by Optical Processing Units
+Repository for the experiments related to the paper "Kernel computations from large-scale random features obtained by Optical Processing Units". The paper can be found here: https://arxiv.org/abs/1910.09880
 
-### Repository Structure
+## Device settings
+
+## Fashion MNIST experiments
+In order to reproduce the Fashion MNIST experiments, follow the following the steps:
+- Download the data from: https://github.com/zalandoresearch/fashion-mnist
+- Load the data into NumPy using the website's instructions
+- Save the data using np.save to the following files: train_data.npy, test_data.npy, train_labels.npy, test_labels.npy
+- Adjust config/datasets/fashion_mnist.json to include your data paths
+- Optional: Run find_thresholds.py to determine the optimal binary threshold and fill it into config/datasets/fashion_mnist.json. We used 10 as a threshold
+- Optional: Run optimize_hyperparameters.py to obtain the optimal hyperparameters for the random projections defined in config/hyperparameter_search/your_config.json. Alternatively, you can simply use one of our config files for the next step
+- Optional: Use Hyperparameters-Fashion-MNIST.ipynb to visualize the hyperparameter grids with validation scores
+- Run evaluate_features.py to obtain test scores for each feature dimension for the desired random projection configuration stored in config/hyperparameter_config/your_config.json
+- Run evaluate_kernels.py to obtain test scores for each kernel configuration stored in config/hyperparameter_config/your_config.json
+- Use Plot-Fashion_MNIST.ipynb to produce the plot shown in the paper
+
+**PLEASE NOTE**: For projection dimensions larger than 10 000 and for exact kernel evaluation, we recommend to activate the option "use_cpu_memory" in your device configuration, even if you use a GPU. This way intermediate results are stored in CPU memory and the GPUs are only used for partial results.
+This is particularly important for evaluate_features.py and evaluate_kernels.py. optimize_hyperparameters.py can be run on a single GPU with "use_cpu_memory" set to false. This accelerates the grid search a lot because all results are kept in GPU memory at any time. In this case, ~50x speed up can be achieved compared to CPU.
+
+## Repository Structure
 
     .
     ├── config                              # .json configuration files
