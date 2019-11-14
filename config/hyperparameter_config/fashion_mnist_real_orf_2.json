@@ -1,5 +1,5 @@
 {
-    "real_opu_2": {
+    "real_opu_2_10k": {
         "projection": "opu_physical",
         "alpha": 20000,
         "kernel_hyperparameters": {
@@ -13,9 +13,7 @@
             "max_iterations": 180000
         },
         "num_features": [
-            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
-            200, 300, 400, 500, 600, 700, 800, 900, 1000,
-            2000, 3000, 4000, 5000, 10000, 20000, 50000, 100000
+            600, 700, 800, 900, 10000
         ],
         "precomputed_features": "opu_features/FashionMNIST_real_opu_bias_4.npy"
     }
