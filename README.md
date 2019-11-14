@@ -1,7 +1,7 @@
 # Kernel computations from large-scale random features obtained by Optical Processing Units
 This is the repository for the experiments related to the paper "Kernel computations from large-scale random features obtained by Optical Processing Units". The paper can be found here: https://arxiv.org/abs/1910.09880
 
-Apart from allowing one to reproduce the paper's result, the repository also contains useful code for large-scale random feature and kernel computations. This makes it possible to solving Ridge Regression problems with up to 100K random features or datapoints without exceeding 32GB of CPU RAM.
+Apart from allowing one to reproduce the paper's result, the repository also contains useful code for large-scale random feature and kernel computations. This makes it possible to solving Ridge Regression problems with up to 100K random features or datapoints without exceeding 32GB of CPU RAM. In addition, multiple GPUs can be used to accelerate large matrix-matrix products and euclidean distance computations.
 
 ## Memory-efficient large-scale computations
 When solving Ridge Regression for large-scale random features (more than 10K dimensions) or when computing exact kernel matrices, we make sure to reduce GPU memory usage. The two most important functions are large_matrix_matrix_product and large_pairwise_distances in util/kernels.py.
