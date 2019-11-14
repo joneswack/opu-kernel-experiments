@@ -1,10 +1,10 @@
 {
-    "real_opu_2_10k": {
+    "real_opu_2_new_param": {
         "projection": "opu_physical",
-        "alpha": 20000,
+        "alpha": 10,
         "kernel_hyperparameters": {
             "degree": 2,
-            "scale": 1,
+            "scale": 0.1,
             "bias": 0
         },
         "cg_config": {
@@ -13,8 +13,10 @@
             "max_iterations": 180000
         },
         "num_features": [
-            600, 700, 800, 900, 10000
+            10, 20, 30, 40, 50, 60, 70, 80, 90, 100,
+            200, 300, 400, 500, 600, 700, 800, 900, 1000,
+            2000, 3000, 4000, 5000, 10000, 20000, 50000, 100000
         ],
-        "precomputed_features": "opu_features/FashionMNIST_real_opu_bias_4.npy"
+        "precomputed_features": "opu_features/FashionMNIST_real_opu_bias_0.npy"
     }
 }
