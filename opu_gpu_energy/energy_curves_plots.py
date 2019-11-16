@@ -117,7 +117,7 @@ def my_savefig(xaxis,gpu_data,opu_data, unit, quantity,legend=False,**kwarg):
 plt.rcParams['font.family'] = "sans-serif"
 plt.rcParams['font.sans-serif'] = "Helvetica"
 plt.rcParams['text.usetex'] = False
-fig, axs = plt.subplots(1, 2, sharex=True, figsize=(6,2))
+fig, axs = plt.subplots(1, 2, sharex=True, figsize=(10,2))
 # plt.xlabel("Projection Dimension $D$")
 my_savefig(0,[gpu_time,gpu_time2],[opu_time,opu_time2], "s", "Computation Time",legend=True)
 my_savefig(1,[gpu_ener,gpu_ener2],[opu_ener,opu_ener2], "Joule", "Energy Consumption")

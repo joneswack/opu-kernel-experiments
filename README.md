@@ -38,8 +38,13 @@ In order to reproduce the experiments, follow the following the steps:
 - Run evaluate_kernels.py to obtain test scores for each kernel configuration stored in config/hyperparameter_config/your_config.json
 - Fashion MNIST: Use Plot-Fashion-MNIST.ipynb to produce the plot shown in the paper
 
-**PLEASE NOTE**: For projection dimensions larger than 10 000 and for exact kernel evaluation, we recommend to activate the option "use_cpu_memory" in your device configuration, even if you use a GPU. This way intermediate results are stored in CPU memory and the GPUs are only used for partial results.
-This is particularly important for evaluate_features.py and evaluate_kernels.py. optimize_hyperparameters.py can be run on a single GPU with "use_cpu_memory" set to false. This accelerates the grid search a lot because all results are kept in GPU memory at any time. In this case, ~50x speed up can be achieved compared to CPU.
+**PLEASE NOTE**: For projection dimensions larger than 10 000 and for exact kernel evaluation, we recommend to activate the option "use_cpu_memory" in your device configuration, even if you use a GPU. This way intermediate results are stored in CPU memory and the GPUs are only used for partial results. This is particularly important for evaluate_features.py and evaluate_kernels.py.
+
+optimize_hyperparameters.py can be run on a single GPU with "use_cpu_memory" set to false. This accelerates the grid search a lot because all results are kept in GPU memory at any time. In this case, ~50x speed up can be achieved compared to CPU.
+
+**KNOWN ISSUE**: When using random projections produced by the real OPU and carrying out subsequent processing on a GPU numerical issues may arise. These do not occur on a CPU.
+
+In particular, the conditioning of the linear systems when solving ridge regression problems may worsen such that the system becomes more difficult or impossible to solve. A solution is to increase regularization (higher alpha), which is only a workaround since it may lead to a suboptimal choice of hyperparameters and therefore worsen the test scores.
 
 ## Repository Structure
 
