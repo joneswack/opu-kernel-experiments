@@ -107,7 +107,8 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
         main_gpu = torch.device('cuda:' + str(device_config['active_gpus'][0]))
     cpu = torch.device('cpu')
 
-    dataloader = get_dataloader(X, labels=None, batchsize=device_config['matrix_prod_batch_size'], shuffle=False)
+    batch_size = device_config['matrix_prod_batch_size']
+    dataloader = get_dataloader(X, labels=None, batchsize=batch_size, shuffle=False)
 
     # If add_overwrite is given, we do not need to allocate new memory for the output!
     if add_overwrite is not None:
@@ -144,7 +145,7 @@ def large_matrix_matrix_product(device_config, X, Y, bias=0, p=1., add_overwrite
                 xTy = xTy.to(cpu)
 
             output_tensor[
-                idx*len(batch) : (idx+1)*len(batch),
+                idx*batch_size : (idx+1)*batch_size,
                 start_index : start_index + offset
             ] += xTy
 
