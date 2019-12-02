@@ -88,7 +88,7 @@ for item in summary:
 
 # Graphism
 def my_savefig(xaxis,gpu_data,opu_data, unit, quantity,legend=False,**kwarg):
-    plt.figure(num=None, dpi=80, facecolor='w', edgecolor='k') # dpi=80, 
+    plt.figure(num=None, dpi=300, facecolor='w', edgecolor='k') # dpi=80, 
     for i in range(len(gpu_data)):
         gd = gpu_data[i]
         od = opu_data[i]
